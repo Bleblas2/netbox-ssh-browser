@@ -25,7 +25,7 @@ from .manual import (
 )
 from .model import Device, Node
 from .service import describe_sync_error, synchronize
-from .terminal import open_iterm_tabs
+from .terminal import is_iterm2, open_iterm_tabs, run_system_ssh
 
 
 @dataclass(frozen=True)
@@ -48,6 +48,7 @@ class View:
     role_devices: list[Device] | None = None
     search_entries: list[Entry] | None = None
     path: tuple[str, ...] = ()
+    cursor_index: int | None = None
 
 
 class AddDeviceScreen(ModalScreen[ManualDevice | None]):
@@ -299,9 +300,17 @@ class NetBoxSSHApp(App[None]):
             items.append(item)
         if items:
             await list_view.extend(items)
-            # Nagłówki są disabled, ale jawnie ustawiamy zaznaczenie na pierwszym
-            # aktywnym elemencie, aby Enter działał bez wciskania strzałki.
-            list_view.index = next(
+            # Każdy poziom pamięta własny kursor, więc powrót wskazuje ostatnio
+            # otwarty site/oddział zamiast pierwszego elementu listy.
+            saved_index = self.views[-1].cursor_index
+            if (
+                saved_index is not None
+                and saved_index < len(self.visible_entries)
+                and self.visible_entries[saved_index].kind != "heading"
+            ):
+                list_view.index = saved_index
+            else:
+                list_view.index = next(
                 (
                     index
                     for index, entry in enumerate(self.visible_entries)
@@ -327,9 +336,11 @@ class NetBoxSSHApp(App[None]):
         if entry is None:
             return
         if entry.kind == "node":
+            self.views[-1].cursor_index = self.query_one(ListView).index
             self.views.append(View(entry.label, node=entry.value, path=entry.path))
             await self._reset_and_render()
         elif entry.kind == "role":
+            self.views[-1].cursor_index = self.query_one(ListView).index
             self.views.append(View(entry.label, role_devices=entry.value))
             await self._reset_and_render()
         elif entry.kind == "device":
@@ -370,16 +381,25 @@ class NetBoxSSHApp(App[None]):
         self._set_status("Device selection cleared.")
 
     def _connect_selected(self) -> None:
-        """Przekazuje zaznaczone urządzenia do integracji z kartami iTerm2."""
+        """Otwiera wiele sesji tylko w kartach iTerm2."""
         devices = list(self.selected_devices.values())
+        if not is_iterm2():
+            self._set_status(
+                "Multiple SSH sessions require iTerm2 on macOS. "
+                "Clear the selection to open one system SSH session.",
+                "error",
+            )
+            return
         try:
             open_iterm_tabs(devices)
         except (OSError, RuntimeError) as error:
-            self._set_status(f"Could not open iTerm2 tabs: {error}", "error")
+            self._set_status(f"Could not start SSH: {error}", "error")
             return
         self.selected_devices.clear()
         self.run_worker(self._render_entries(), exclusive=True)
-        self._set_status(f"Opened {len(devices)} SSH sessions in iTerm2 tabs.", "success")
+        self._set_status(
+            f"Opened {len(devices)} SSH sessions in iTerm2 tabs.", "success"
+        )
 
     async def _reset_and_render(self) -> None:
         search = self.query_one(Input)
@@ -575,11 +595,17 @@ class NetBoxSSHApp(App[None]):
             # Na czas SSH oddajemy terminal klientowi systemowemu, a po jego
             # zakończeniu Textual odtwarza poprzedni ekran.
             with self.suspend():
-                subprocess.run(["ssh", device.ssh_target], check=False, env=environment)
+                results = run_system_ssh([device])
         except OSError as error:
             self._set_status(f"Could not start ssh: {error}", "error")
         else:
-            self._set_status(f"SSH session with {device.name} ended.")
+            return_code = results[0][1]
+            if return_code == 0:
+                self._set_status(f"SSH session with {device.name} ended.")
+            else:
+                self._set_status(
+                    f"SSH to {device.name} exited with status {return_code}.", "error"
+                )
 
     def _set_status(self, message: str, style_class: str | None = None) -> None:
         status = self.query_one("#status", Static)

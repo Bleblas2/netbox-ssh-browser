@@ -2,8 +2,8 @@
 
 ## Python
 
-NetBox SSH Browser requires Python 3.11 or newer. The automated test suite is
-currently run with Python 3.13.
+NetBox SSH Browser requires Python 3.11 or newer. The automated test suite runs
+with Python 3.11 and 3.13 on macOS, Linux, and Windows.
 
 ## Operating Systems
 
@@ -11,6 +11,7 @@ currently run with Python 3.13.
 |------------------|--------|----------------|
 | macOS | Supported and tested | `~/Library/Caches/netbox-ssh-browser/` |
 | Linux | Supported | `~/.cache/netbox-ssh-browser/` |
+| Ubuntu on WSL2 | Supported and manually tested | `~/.cache/netbox-ssh-browser/` |
 | Windows | Expected to work; system `ssh` is required | `%LOCALAPPDATA%` via `platformdirs` |
 
 ## NetBox
@@ -30,4 +31,6 @@ iTerm2 plugin.
 
 Opening multiple selected devices as tabs is currently supported only when
 `nssh` runs inside iTerm2 on macOS. Other terminals retain the portable
-single-device SSH behavior.
+single-device SSH behavior through their system `ssh` command. On Linux and
+Ubuntu under WSL2, multiple selections display an explanatory message instead
+of attempting to invoke the macOS-only integration.

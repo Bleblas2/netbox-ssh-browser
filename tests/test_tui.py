@@ -3,6 +3,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from textual.widgets import ListView
+
 from netbox_ssh.cache import Cache
 from netbox_ssh.config import Config
 from netbox_ssh.model import Device, Node
@@ -63,6 +65,31 @@ class TUITests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual([entry.label for entry in app.visible_entries], ["switch-one"])
             self.assertEqual(app.views[-1].title, "Device search")
 
+    async def test_back_restores_last_selected_branch(self) -> None:
+        first = Node("branch-a-01", devices=[Device("switch-one", "Switch")])
+        second = Node("branch-b-01", devices=[Device("switch-two", "Switch")])
+        country = Node(
+            "Country A",
+            children=[
+                Node("City A", children=[first]),
+                Node("City B", children=[second]),
+            ],
+        )
+        app = self.make_app(
+            Cache(
+                "2026-08-02T00:00:00+02:00",
+                [Node("Region Group A", children=[country])],
+            )
+        )
+        async with app.run_test() as pilot:
+            await pilot.press("enter", "down", "enter")
+            await pilot.pause()
+            self.assertEqual(app.views[-1].title, "branch-b-01")
+            await pilot.press("escape")
+            await pilot.pause()
+            self.assertEqual(app.query_one(ListView).index, 3)
+            self.assertEqual(app.visible_entries[3].label, "branch-b-01")
+
     async def test_adds_manual_device_in_current_branch(self) -> None:
         device = Device("switch-one", "Access Switch", "192.0.2.1/24")
         branch = Node("branch-a-01", devices=[device])
@@ -99,7 +126,9 @@ class TUITests(unittest.IsolatedAsyncioTestCase):
                 [Node("Region Group A", children=[country])],
             )
         )
-        with patch("netbox_ssh.tui.open_iterm_tabs") as open_tabs:
+        with patch("netbox_ssh.tui.is_iterm2", return_value=True), patch(
+            "netbox_ssh.tui.open_iterm_tabs"
+        ) as open_tabs:
             async with app.run_test() as pilot:
                 await pilot.press("enter", "enter", "ctrl+t", "down", "ctrl+t")
                 await pilot.pause()
