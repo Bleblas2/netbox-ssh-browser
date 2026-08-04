@@ -295,13 +295,17 @@ Access Switch
 
 The headings are skipped by arrow-key navigation. Selecting a device
 immediately suspends the TUI and starts the system SSH client. When SSH exits,
-the previous TUI view is restored.
+the previous TUI view is restored. Returning from a site or branch also restores
+the previously highlighted entry, which makes sequential device checks easier.
 
 On macOS in iTerm2, select devices with `Ctrl+T` (or `Space`) and press `Enter`
 to open every selected SSH connection
 in a separate tab of the current iTerm2 window. The `nssh` tab remains open.
 The first launch may cause macOS to request permission to automate iTerm2.
 `Ctrl+U` clears the selection. Single-device SSH remains terminal-independent.
+On Linux, WSL, Windows, and macOS terminals other than iTerm2, only a single
+system SSH session is available; attempting a multi-session launch displays a
+clear compatibility message.
 
 `C` and `M` temporarily suspend the TUI and launch `$VISUAL`, then `$EDITOR`,
 or `nano` when neither variable is configured. The editor process does not
