@@ -11,7 +11,7 @@ class EntrypointTests(unittest.TestCase):
         with contextlib.redirect_stdout(output), self.assertRaises(SystemExit) as exit_result:
             main(["--version"])
         self.assertEqual(exit_result.exception.code, 0)
-        self.assertEqual(output.getvalue().strip(), "nssh 0.1.1")
+        self.assertEqual(output.getvalue().strip(), "nssh 0.1.2")
 
 
 if __name__ == "__main__":

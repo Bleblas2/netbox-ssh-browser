@@ -44,6 +44,21 @@ class ManufacturerFilterTests(unittest.TestCase):
         devices = [{"name": "one"}]
         self.assertIs(filter_ignored_manufacturers(devices, ()), devices)
 
+    def test_missing_device_type_is_kept_when_filtering_manufacturers(self) -> None:
+        devices = [
+            {"name": "without-device-type", "device_type": None},
+            {
+                "name": "ignored-cisco-device",
+                "device_type": {"manufacturer": {"name": "Cisco"}},
+            },
+        ]
+
+        result = filter_ignored_manufacturers(devices, ("Cisco",))
+
+        self.assertEqual(
+            [device["name"] for device in result], ["without-device-type"]
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
