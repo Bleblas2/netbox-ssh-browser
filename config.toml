@@ -1,0 +1,21 @@
+[netbox]
+# Paste only the token value, without the Bearer or Token prefix. The user
+# config.toml should have mode 0600. Never commit a real token to the repository.
+api_token = ""
+url = "https://netbox.example.com"
+# Set to false only for a trusted NetBox instance with a self-signed certificate.
+# Production environments should use true.
+verify_ssl = true
+
+[sync]
+# NetBox status slugs. An empty list [] includes devices with any status.
+device_statuses = ["active"]
+
+# Manufacturer names or slugs to exclude from synchronization.
+ignored_manufacturers = ["Example Manufacturer"]
+
+device_roles = [
+  "Access Switch",
+  "Core Router",
+  "Edge Router",
+]
