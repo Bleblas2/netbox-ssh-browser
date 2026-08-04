@@ -18,6 +18,8 @@ for quick access when NetBox is unavailable. It does not implement an SSH
 client, store SSH credentials, modify NetBox, or synchronize automatically in
 the background.
 
+![NetBox SSH Browser demonstration](docs/images/netbox-ssh-browser-demo.gif)
+
 ## Contents
 
 - [What It Does](#what-it-does)
@@ -104,16 +106,34 @@ new terminal after updating `PATH`.
 
 ### Windows
 
-In PowerShell, install `pipx` with Scoop:
+Install Python 3.13 from WinGet in PowerShell:
 
 ```powershell
-scoop install pipx
-pipx ensurepath
-pipx install netbox-ssh-browser
+winget install --exact --id Python.Python.3.13
 ```
 
-Alternatively, install pipx through Python with `py -m pip install --user pipx`,
-run the resulting `pipx.exe ensurepath`, and restart PowerShell.
+Close every PowerShell window and open PowerShell again so that the `py`
+launcher is added to `PATH`. Confirm the installation, then install `pipx`:
+
+```powershell
+py --version
+py -m pip install --user pipx
+py -m pipx ensurepath
+```
+
+Close PowerShell and open it again a second time so that `pipx` and its
+application directory are added to `PATH`. Then install and verify NetBox SSH
+Browser:
+
+```powershell
+pipx --version
+pipx install netbox-ssh-browser
+nssh --version
+```
+
+The expected version output is similar to `nssh 0.1.2`. Scoop is an optional
+alternative, but `scoop install pipx` works only when Scoop has already been
+installed separately.
 
 ### Verify, upgrade, and uninstall
 
@@ -416,6 +436,15 @@ python -m compileall -q src tests
 
 See [COMPATIBILITY.md](COMPATIBILITY.md) for the supported Python, operating
 system, terminal, and NetBox versions.
+
+The application has been manually tested on:
+
+- macOS on Apple silicon (MacBook Pro M5 Pro) with iTerm2,
+- Ubuntu under WSL2 on Windows,
+- native Windows with PowerShell, Windows Terminal, and Windows OpenSSH.
+
+The automated test suite additionally runs on macOS, Ubuntu, and Windows with
+Python 3.11 and 3.13.
 
 ## Acknowledgements
 

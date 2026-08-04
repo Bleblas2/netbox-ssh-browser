@@ -97,10 +97,19 @@ def build_tree(
             target_node = _child_named(region_node, site_name)
         role = raw.get("role") or raw.get("device_role") or {}
         role_name = role.get("name") or role.get("display") or "Other"
+        # NetBox zezwala na urządzenia bez nazwy. W takim przypadku odpowiedź
+        # API zawiera zwykle czytelne `display`; ID pozostaje ostatnim,
+        # stabilnym fallbackiem i gwarantuje tekst wymagany przez TUI.
+        device_name = raw.get("name") or raw.get("display")
+        if not device_name:
+            device_id = raw.get("id")
+            device_name = (
+                f"Device {device_id}" if device_id is not None else "Unnamed device"
+            )
         ip = raw.get("primary_ip4") or raw.get("primary_ip6")
         if isinstance(ip, dict):
             ip = ip.get("address") or ip.get("display")
-        target_node.devices.append(Device(raw["name"], role_name, ip))
+        target_node.devices.append(Device(str(device_name), str(role_name), ip))
 
     _prune_and_sort(roots)
     return roots
@@ -124,8 +133,10 @@ def _object_id(value: Any) -> int | None:
 
 def _prune_and_sort(nodes: list[Node]) -> None:
     # Puste gałęzie nie pomagają w nawigacji, więc nie zapisujemy ich w cache.
-    nodes[:] = [node for node in nodes if node.children or node.devices]
-    nodes.sort(key=lambda item: item.name.casefold())
+    # Najpierw czyścimy potomków, bo rodzic zawierający wyłącznie puste gałęzie
+    # również powinien zostać usunięty.
     for node in nodes:
         _prune_and_sort(node.children)
         node.devices.sort(key=lambda item: (item.role.casefold(), item.name.casefold()))
+    nodes[:] = [node for node in nodes if node.children or node.devices]
+    nodes.sort(key=lambda item: item.name.casefold())

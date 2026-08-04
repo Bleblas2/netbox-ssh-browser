@@ -12,7 +12,7 @@ with Python 3.11 and 3.13 on macOS, Linux, and Windows.
 | macOS | Supported and tested | `~/Library/Caches/netbox-ssh-browser/` |
 | Linux | Supported | `~/.cache/netbox-ssh-browser/` |
 | Ubuntu on WSL2 | Supported and manually tested | `~/.cache/netbox-ssh-browser/` |
-| Windows | Expected to work; system `ssh` is required | `%LOCALAPPDATA%` via `platformdirs` |
+| Windows | Supported and manually tested | `%LOCALAPPDATA%` via `platformdirs` |
 
 ## NetBox
 
@@ -26,8 +26,9 @@ before inventory reaches the application.
 ## Terminals
 
 The Textual interface requires a terminal with standard ANSI and alternate
-screen support. It is tested in iTerm2 on macOS and is not implemented as an
-iTerm2 plugin.
+screen support. It is manually tested in iTerm2 on macOS, Ubuntu under WSL2,
+and Windows Terminal with PowerShell. It is not implemented as an iTerm2
+plugin.
 
 Opening multiple selected devices as tabs is currently supported only when
 `nssh` runs inside iTerm2 on macOS. Other terminals retain the portable
