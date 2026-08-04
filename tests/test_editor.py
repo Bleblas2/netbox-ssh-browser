@@ -34,7 +34,18 @@ class EditorTests(unittest.TestCase):
             manual_path = root / "manual.json"
             ensure_config_file(config_path)
             ensure_manual_file(manual_path)
-            self.assertIn("verify_ssl = true", config_path.read_text(encoding="utf-8"))
+            config_text = config_path.read_text(encoding="utf-8")
+            self.assertIn('url = ""', config_text)
+            self.assertIn('api_token = ""', config_text)
+            self.assertIn("verify_ssl = true", config_text)
+            self.assertIn(
+                '# Example: ignored_manufacturers = ["Cisco", "Juniper", "Arista"]',
+                config_text,
+            )
+            self.assertIn(
+                '# Example: device_roles = ["Router", "Core Switch", "Distribution Switch"]',
+                config_text,
+            )
             self.assertEqual(load_manual_devices(manual_path), [])
             config_path.write_text("custom = true\n", encoding="utf-8")
             ensure_config_file(config_path)

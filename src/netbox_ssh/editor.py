@@ -9,13 +9,20 @@ from .manual import save_manual_devices
 
 
 DEFAULT_CONFIG = """[netbox]
+url = ""
 # Paste only the token value, without the Bearer or Token prefix.
 api_token = ""
 verify_ssl = true
 
 [sync]
+# Empty [] imports devices with any status.
+# Example: device_statuses = ["active", "planned", "staged"]
 device_statuses = ["active"]
+# Empty [] does not exclude any manufacturer.
+# Example: ignored_manufacturers = ["Cisco", "Juniper", "Arista"]
 ignored_manufacturers = []
+# Empty [] imports devices with every role.
+# Example: device_roles = ["Router", "Core Switch", "Distribution Switch"]
 device_roles = []
 """
 
