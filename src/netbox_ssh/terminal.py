@@ -32,6 +32,20 @@ def is_iterm2() -> bool:
     return platform.system() == "Darwin" and os.environ.get("TERM_PROGRAM") == "iTerm.app"
 
 
+def run_system_ssh(devices: Sequence[Device]) -> list[tuple[Device, int]]:
+    """Uruchamia systemowy OpenSSH, przenośnie także na Linuxie i WSL."""
+    environment = os.environ.copy()
+    environment.pop("NETBOX_API_TOKEN", None)
+    environment.pop("NETBOX_URL", None)
+    results = []
+    for device in devices:
+        result = subprocess.run(
+            ["ssh", device.ssh_target], check=False, env=environment
+        )
+        results.append((device, result.returncode))
+    return results
+
+
 def open_iterm_tabs(devices: Sequence[Device]) -> None:
     """Otwiera osobną kartę iTerm2 dla każdego urządzenia.
 
