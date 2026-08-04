@@ -65,7 +65,7 @@ Test the wheel rather than the source checkout:
 ```bash
 python -m venv /tmp/netbox-ssh-browser-release-test
 /tmp/netbox-ssh-browser-release-test/bin/python -m pip install \
-  dist/netbox_ssh_browser-0.1.1-py3-none-any.whl
+  dist/netbox_ssh_browser-0.1.2-py3-none-any.whl
 /tmp/netbox-ssh-browser-release-test/bin/nssh --version
 ```
 
@@ -80,7 +80,7 @@ paths in a temporary virtual environment.
 2. Move completed entries from `Unreleased` in `CHANGELOG.md` into the new
    version section.
 3. Run the complete test and build checks locally.
-4. Push the release commit and a matching tag such as `v0.1.1`.
+4. Push the release commit and a matching tag such as `0.1.2`.
 5. Create and publish a GitHub Release from that tag, or manually run the
    `Publish package to PyPI` workflow from GitHub Actions.
 6. Approve the protected `pypi` environment when GitHub requests it.

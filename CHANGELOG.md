@@ -7,6 +7,20 @@ versioning.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-08-04
+
+### Changed
+
+- Windows installation documentation now covers installing Python with
+  WinGet and restarting PowerShell after both Python and pipx update `PATH`.
+
+### Fixed
+
+- Empty top-level regions are removed after their empty descendant locations
+  are pruned from the synchronized inventory tree.
+- NetBox devices without a name no longer fail synchronization; their API
+  display value or object ID is used as a safe fallback label.
+
 ## [0.1.1] - 2026-08-04
 
 ### Added
