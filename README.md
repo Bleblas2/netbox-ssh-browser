@@ -57,7 +57,7 @@ the background.
   `NETBOX_API_TOKEN`. It is never written to cache or logs.
 - The NetBox token and URL are removed from the child SSH process environment.
 - SSH is started as an argument list without `shell=True`.
-- Host keys, SSH Agent, ProxyJump, keys, and connection options remain managed
+- Host keys, SSH Agent, keys, and connection options remain managed
   by the system OpenSSH client and `~/.ssh/config`.
 - A failed or interrupted sync never overwrites the previous valid cache.
 - The cache directory is mode `0700` and the cache file is mode `0600`.
@@ -191,6 +191,7 @@ Store the NetBox URL and API token in the private user configuration:
 url = "https://netbox.example.com"
 api_token = "your-token"
 verify_ssl = true
+
 ```
 
 The token must contain only its value, without the `Bearer` or `Token` prefix.
@@ -278,9 +279,12 @@ jump_host = "jump-host"
 
 The value may be a hostname, IP address, `user@host`, or an alias defined in
 `~/.ssh/config`. Highlight a device and press `J` to persistently enable or
-disable the jump host for it. Marked devices display `J` and are opened with
-OpenSSH ProxyJump (`ssh -J jump-host target`). SSH keys remain managed by the
-local OpenSSH client.
+disable the jump host for it. Marked devices display `J`. The application first
+connects to the jump host and runs a second SSH client there (`ssh -tt jump-host
+"ssh target"`). This supports jump hosts that prohibit TCP forwarding: the
+local client can authenticate to the jump host with a key, while the target can
+prompt interactively for a password. Passwords are never stored by the
+application.
 
 ## First Run
 
