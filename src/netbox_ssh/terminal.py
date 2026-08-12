@@ -33,13 +33,14 @@ def is_iterm2() -> bool:
 
 
 def ssh_arguments(device: Device, jump_host: str | None = None) -> list[str]:
-    arguments = ["ssh"]
     if device.use_jump_host:
         if not jump_host:
             raise ValueError("No SSH jump host is configured.")
-        arguments.extend(["-J", jump_host])
-    arguments.append(device.ssh_target)
-    return arguments
+        # The second client runs on the jump host. This works on bastions that
+        # prohibit TCP forwarding and lets the target prompt for a password.
+        remote_command = f"ssh {shlex.quote(device.ssh_target)}"
+        return ["ssh", "-tt", jump_host, remote_command]
+    return ["ssh", device.ssh_target]
 
 
 def run_system_ssh(

@@ -32,6 +32,17 @@ class ITermTabsTests(unittest.TestCase):
         self.assertNotIn("NETBOX_URL", run.call_args.kwargs["env"])
         self.assertFalse(run.call_args.kwargs["check"])
 
+    @patch("netbox_ssh.terminal.subprocess.run")
+    @patch("netbox_ssh.terminal.is_iterm2", return_value=True)
+    def test_opens_nested_ssh_command_in_iterm(self, _is_iterm2, run) -> None:
+        run.return_value.returncode = 0
+        run.return_value.stderr = ""
+        device = Device("switch-one", "Core", "192.0.2.1", use_jump_host=True)
+        open_iterm_tabs([device], "jump-alias")
+        self.assertEqual(
+            run.call_args.args[0][-1], "ssh -tt jump-alias 'ssh 192.0.2.1'"
+        )
+
     @patch("netbox_ssh.terminal.is_iterm2", return_value=False)
     def test_rejects_batch_outside_iterm2(self, _is_iterm2) -> None:
         with self.assertRaisesRegex(RuntimeError, "requires iTerm2"):
@@ -60,7 +71,8 @@ class SystemSSHTests(unittest.TestCase):
         device = Device("switch-one", "Core", "192.0.2.1", use_jump_host=True)
         run_system_ssh([device], "jump-alias")
         self.assertEqual(
-            run.call_args.args[0], ["ssh", "-J", "jump-alias", "192.0.2.1"]
+            run.call_args.args[0],
+            ["ssh", "-tt", "jump-alias", "ssh 192.0.2.1"],
         )
 
     def test_rejects_marked_device_without_configured_jump_host(self) -> None:
