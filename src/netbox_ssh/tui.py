@@ -8,10 +8,10 @@ from typing import Any
 
 from rich.text import Text
 from textual import on
-from textual.app import App, ComposeResult
+from textual.app import App, ComposeResult, SystemCommand
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.screen import ModalScreen
+from textual.screen import ModalScreen, Screen
 from textual.widgets import Button, Footer, Header, Input, Label, ListItem, ListView, Static
 
 from .cache import Cache
@@ -147,8 +147,8 @@ class NetBoxSSHApp(App[None]):
     BINDINGS = [
         Binding("q", "quit", "Quit"),
         Binding("escape", "back", "Back"),
-        Binding("s", "sync", "Sync from NetBox"),
-        Binding("slash", "search", "Device search"),
+        Binding("s", "sync", "Sync", tooltip="Sync from NetBox"),
+        Binding("slash", "search", "Search", tooltip="Device search"),
         Binding("plus", "add_device", "Add manual device"),
         Binding("c", "edit_config", "Edit config"),
         Binding("m", "edit_manual", "Edit manual"),
@@ -188,6 +188,20 @@ class NetBoxSSHApp(App[None]):
             yield ListView(id="device-list")
             yield Static(id="status")
         yield Footer()
+
+    def get_system_commands(self, screen: Screen):
+        """Adds full action names to the palette while the footer stays compact."""
+        yield from super().get_system_commands(screen)
+        yield SystemCommand(
+            "Sync from NetBox",
+            "Refresh the local device inventory from NetBox",
+            self.action_sync,
+        )
+        yield SystemCommand(
+            "Device search",
+            "Search all cached devices by name or primary IP",
+            self.action_search,
+        )
 
     async def on_mount(self) -> None:
         await self._render_entries()
@@ -391,7 +405,7 @@ class NetBoxSSHApp(App[None]):
         self._set_status("Device selection cleared.")
 
     async def action_toggle_jump_host(self) -> None:
-        """Trwale przełącza ProxyJump dla wskazanego urządzenia."""
+        """Trwale przełącza połączenie przez SSH uruchamiane na jump hoście."""
         list_view = self.query_one(ListView)
         if list_view.index is None or list_view.index >= len(self.visible_entries):
             return
