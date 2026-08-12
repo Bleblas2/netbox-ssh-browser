@@ -1,4 +1,4 @@
-from __future__ import annotations
+from fnmatch import fnmatchcase
 
 import httpx
 
@@ -17,6 +17,8 @@ def synchronize(config: Config) -> tuple[Cache, int]:
         regions, sites, devices = client.fetch_inventory(config.device_statuses)
     devices = filter_device_roles(devices, config.device_roles)
     devices = filter_ignored_manufacturers(devices, config.ignored_manufacturers)
+    devices = filter_ignored_device_types(devices, config.ignored_device_types)
+    devices = filter_ignored_name_patterns(devices, config.ignored_name_patterns)
     region_tree = build_tree(regions, sites, devices)
     return save_cache(config.cache_path, region_tree), len(devices)
 
@@ -55,6 +57,43 @@ def filter_ignored_manufacturers(
         if not identifiers.intersection(ignored):
             result.append(device)
     return result
+
+
+def _matches_any(value: object, patterns: tuple[str, ...]) -> bool:
+    text = str(value or "").casefold()
+    return bool(text) and any(
+        fnmatchcase(text, pattern.casefold()) for pattern in patterns
+    )
+
+
+def filter_ignored_device_types(
+    devices: list[dict], ignored_patterns: tuple[str, ...]
+) -> list[dict]:
+    """Removes devices whose model, slug, or display matches a glob pattern."""
+    if not ignored_patterns:
+        return devices
+    result = []
+    for device in devices:
+        device_type = device.get("device_type") or {}
+        values = (device_type.get(field) for field in ("model", "slug", "display"))
+        if not any(_matches_any(value, ignored_patterns) for value in values):
+            result.append(device)
+    return result
+
+
+def filter_ignored_name_patterns(
+    devices: list[dict], ignored_patterns: tuple[str, ...]
+) -> list[dict]:
+    """Removes devices whose name (or display fallback) matches a glob pattern."""
+    if not ignored_patterns:
+        return devices
+    return [
+        device
+        for device in devices
+        if not _matches_any(
+            device.get("name") or device.get("display"), ignored_patterns
+        )
+    ]
 
 
 def describe_sync_error(error: Exception) -> str:

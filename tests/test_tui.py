@@ -135,8 +135,43 @@ class TUITests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(list(app.selected_devices.values()), [first, second])
                 await pilot.press("enter")
                 await pilot.pause()
-                open_tabs.assert_called_once_with([first, second])
+                open_tabs.assert_called_once_with([first, second], None)
                 self.assertEqual(app.selected_devices, {})
+
+    async def test_toggles_and_persists_jump_host_for_device(self) -> None:
+        device = Device(
+            "switch-one", "Access Switch", "192.0.2.1/24", identifier="netbox:42"
+        )
+        branch = Node("branch-a-01", devices=[device])
+        country = Node("Country A", children=[Node("City A", children=[branch])])
+        with tempfile.TemporaryDirectory() as directory:
+            app = self.make_app(
+                Cache(
+                    "2026-08-02T00:00:00+02:00",
+                    [Node("Region Group A", children=[country])],
+                ),
+                Path(directory),
+            )
+            app.config = Config(
+                **{
+                    **app.config.__dict__,
+                    "jump_host": "jump-alias",
+                    "jump_state_path": Path(directory) / "jump.json",
+                }
+            )
+            async with app.run_test() as pilot:
+                await pilot.press("enter", "enter", "j")
+                await pilot.pause()
+                visible_device = next(
+                    entry.value for entry in app.visible_entries if entry.kind == "device"
+                )
+                self.assertTrue(visible_device.use_jump_host)
+                self.assertEqual(app.jump_devices, {"netbox:42"})
+                self.assertTrue(app.config.jump_state_path.is_file())
+                await pilot.press("j")
+                await pilot.pause()
+                self.assertFalse(visible_device.use_jump_host)
+                self.assertEqual(app.jump_devices, set())
 
     async def test_clears_selected_devices(self) -> None:
         device = Device("switch-one", "Access Switch", "192.0.2.1/24")
