@@ -12,6 +12,8 @@ class Device:
     role: str
     primary_ip: str | None = None
     source: str = "netbox"
+    identifier: str | None = None
+    use_jump_host: bool = False
 
     @property
     def ssh_target(self) -> str:
@@ -24,6 +26,7 @@ class Device:
             "role": self.role,
             "primary_ip": self.primary_ip,
             "source": self.source,
+            "identifier": self.identifier,
         }
 
     @classmethod
@@ -33,6 +36,7 @@ class Device:
             data["role"],
             data.get("primary_ip"),
             data.get("source", "netbox"),
+            data.get("identifier"),
         )
 
 
@@ -109,7 +113,11 @@ def build_tree(
         ip = raw.get("primary_ip4") or raw.get("primary_ip6")
         if isinstance(ip, dict):
             ip = ip.get("address") or ip.get("display")
-        target_node.devices.append(Device(str(device_name), str(role_name), ip))
+        device_id = raw.get("id")
+        identifier = f"netbox:{device_id}" if device_id is not None else None
+        target_node.devices.append(
+            Device(str(device_name), str(role_name), ip, identifier=identifier)
+        )
 
     _prune_and_sort(roots)
     return roots

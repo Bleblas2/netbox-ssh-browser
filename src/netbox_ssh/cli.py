@@ -6,6 +6,7 @@ import sys
 from . import __version__
 from .cache import load_cache
 from .config import Config
+from .jump_state import load_jump_devices
 from .manual import load_manual_devices
 from .service import filter_device_roles
 from .tui import NetBoxSSHApp
@@ -35,10 +36,16 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     try:
         manual_devices = load_manual_devices(config.manual_path)
+        jump_devices = load_jump_devices(
+            config.jump_state_path
+            or config.manual_path.with_name("jump-host-devices.json")
+        )
     except ValueError as error:
-        print(f"Manual inventory error: {error}", file=sys.stderr)
+        print(f"Local data error: {error}", file=sys.stderr)
         return 1
-    NetBoxSSHApp(config, load_cache(config.cache_path), manual_devices).run()
+    NetBoxSSHApp(
+        config, load_cache(config.cache_path), manual_devices, jump_devices
+    ).run()
     return 0
 
 
