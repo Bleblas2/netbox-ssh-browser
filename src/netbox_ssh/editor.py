@@ -21,9 +21,19 @@ device_statuses = ["active"]
 # Empty [] does not exclude any manufacturer.
 # Example: ignored_manufacturers = ["Cisco", "Juniper", "Arista"]
 ignored_manufacturers = []
+# Glob patterns matched case-insensitively against model, slug, and display.
+# Example: ignored_device_types = ["MX*", "ISR4451"]
+ignored_device_types = []
+# Glob patterns matched case-insensitively against device names.
+# Example: ignored_name_patterns = ["*CORE", "TEST-*"]
+ignored_name_patterns = []
 # Empty [] imports devices with every role.
 # Example: device_roles = ["Router", "Core Switch", "Distribution Switch"]
 device_roles = []
+
+[ssh]
+# Hostname, IP, user@host, or an alias from ~/.ssh/config.
+jump_host = ""
 """
 
 

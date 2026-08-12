@@ -89,7 +89,16 @@ def merge_manual_devices(regions: list[Node], devices: list[ManualDevice]) -> li
             nodes = current.children
         assert current is not None
         current.devices.append(
-            Device(manual.name, manual.role, manual.target, source="manual")
+            Device(
+                manual.name,
+                manual.role,
+                manual.target,
+                source="manual",
+                identifier=(
+                    "manual:"
+                    + "/".join((*manual.location_path, manual.name)).casefold()
+                ),
+            )
         )
     _sort_tree(merged)
     return merged

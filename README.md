@@ -247,6 +247,8 @@ CA.
 [sync]
 device_statuses = ["active"]
 ignored_manufacturers = ["Example Manufacturer"]
+ignored_device_types = ["MX*"]
+ignored_name_patterns = ["*CORE", "TEST-*"]
 device_roles = [
   "Access Switch",
   "Core Router",
@@ -260,8 +262,25 @@ device_roles = [
   case-insensitively. An empty list includes every role.
 - `ignored_manufacturers` accepts manufacturer names, slugs, or display values,
   compared case-insensitively. An empty list excludes nothing.
-- Status filters are sent to the NetBox API. Role and manufacturer filters are
+- `ignored_device_types` contains case-insensitive glob patterns matched against
+  a device type's model, slug, and display value.
+- `ignored_name_patterns` contains case-insensitive glob patterns matched against
+  device names. `*` matches any text and `?` matches one character.
+- Status filters are sent to the NetBox API. Other inventory filters are
   applied before the cache is written.
+
+### SSH jump host
+
+```toml
+[ssh]
+jump_host = "jump-host"
+```
+
+The value may be a hostname, IP address, `user@host`, or an alias defined in
+`~/.ssh/config`. Highlight a device and press `J` to persistently enable or
+disable the jump host for it. Marked devices display `J` and are opened with
+OpenSSH ProxyJump (`ssh -J jump-host target`). SSH keys remain managed by the
+local OpenSSH client.
 
 ## First Run
 
@@ -289,6 +308,7 @@ required API requests and filters complete successfully.
 | `Enter` | Open a location or start SSH for a device |
 | `Ctrl+T` / `Space` | Select or unselect a device for a multi-session launch |
 | `Ctrl+U` | Clear all selected devices |
+| `J` | Enable or disable the configured jump host for a device |
 | `Esc` | Close search or return to the previous level |
 | `/` | Search all cached devices by name or primary IP |
 | `S` | Sync from NetBox |
@@ -422,6 +442,7 @@ The implementation is split by responsibility under `src/netbox_ssh`:
 - `model.py` builds and prunes the location tree.
 - `cache.py` validates and atomically writes cache version 2.
 - `manual.py` validates, stores, and merges persistent manual devices.
+- `jump_state.py` stores persistent per-device jump-host choices.
 - `tui.py` implements navigation, search, background sync, and SSH handoff.
 - `terminal.py` contains the optional multi-tab iTerm2 integration.
 

@@ -32,7 +32,19 @@ def is_iterm2() -> bool:
     return platform.system() == "Darwin" and os.environ.get("TERM_PROGRAM") == "iTerm.app"
 
 
-def run_system_ssh(devices: Sequence[Device]) -> list[tuple[Device, int]]:
+def ssh_arguments(device: Device, jump_host: str | None = None) -> list[str]:
+    arguments = ["ssh"]
+    if device.use_jump_host:
+        if not jump_host:
+            raise ValueError("No SSH jump host is configured.")
+        arguments.extend(["-J", jump_host])
+    arguments.append(device.ssh_target)
+    return arguments
+
+
+def run_system_ssh(
+    devices: Sequence[Device], jump_host: str | None = None
+) -> list[tuple[Device, int]]:
     """Uruchamia systemowy OpenSSH, przenośnie także na Linuxie i WSL."""
     environment = os.environ.copy()
     environment.pop("NETBOX_API_TOKEN", None)
@@ -40,13 +52,13 @@ def run_system_ssh(devices: Sequence[Device]) -> list[tuple[Device, int]]:
     results = []
     for device in devices:
         result = subprocess.run(
-            ["ssh", device.ssh_target], check=False, env=environment
+            ssh_arguments(device, jump_host), check=False, env=environment
         )
         results.append((device, result.returncode))
     return results
 
 
-def open_iterm_tabs(devices: Sequence[Device]) -> None:
+def open_iterm_tabs(devices: Sequence[Device], jump_host: str | None = None) -> None:
     """Otwiera osobną kartę iTerm2 dla każdego urządzenia.
 
     Polecenie SSH jest cytowane jako pojedynczy argument powłoki, a sam
@@ -58,7 +70,7 @@ def open_iterm_tabs(devices: Sequence[Device]) -> None:
     if not is_iterm2():
         raise RuntimeError("Opening multiple sessions requires iTerm2 on macOS.")
 
-    commands = [f"ssh {shlex.quote(device.ssh_target)}" for device in devices]
+    commands = [shlex.join(ssh_arguments(device, jump_host)) for device in devices]
     environment = os.environ.copy()
     environment.pop("NETBOX_API_TOKEN", None)
     environment.pop("NETBOX_URL", None)

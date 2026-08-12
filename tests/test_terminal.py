@@ -54,6 +54,20 @@ class SystemSSHTests(unittest.TestCase):
         self.assertNotIn("NETBOX_API_TOKEN", run.call_args.kwargs["env"])
         self.assertNotIn("NETBOX_URL", run.call_args.kwargs["env"])
 
+    @patch("netbox_ssh.terminal.subprocess.run")
+    def test_runs_marked_device_through_jump_host(self, run) -> None:
+        run.return_value.returncode = 0
+        device = Device("switch-one", "Core", "192.0.2.1", use_jump_host=True)
+        run_system_ssh([device], "jump-alias")
+        self.assertEqual(
+            run.call_args.args[0], ["ssh", "-J", "jump-alias", "192.0.2.1"]
+        )
+
+    def test_rejects_marked_device_without_configured_jump_host(self) -> None:
+        device = Device("switch-one", "Core", use_jump_host=True)
+        with self.assertRaisesRegex(ValueError, "No SSH jump host"):
+            run_system_ssh([device])
+
 
 if __name__ == "__main__":
     unittest.main()

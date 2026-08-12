@@ -14,8 +14,16 @@ device_statuses = ["active"]
 # Manufacturer names or slugs to exclude from synchronization.
 ignored_manufacturers = ["Example Manufacturer"]
 
+# Case-insensitive glob patterns (* and ? are supported).
+ignored_device_types = []
+ignored_name_patterns = []
+
 device_roles = [
   "Access Switch",
   "Core Router",
   "Edge Router",
 ]
+
+[ssh]
+# Hostname, IP, user@host, or an alias from ~/.ssh/config.
+jump_host = ""
