@@ -191,6 +191,7 @@ Store the NetBox URL and API token in the private user configuration:
 url = "https://netbox.example.com"
 api_token = "your-token"
 verify_ssl = true
+
 ```
 
 The token must contain only its value, without the `Bearer` or `Token` prefix.
