@@ -1,7 +1,11 @@
 import unittest
 
 from netbox_ssh.cli import filter_device_roles
-from netbox_ssh.service import filter_ignored_manufacturers
+from netbox_ssh.service import (
+    filter_ignored_device_types,
+    filter_ignored_manufacturers,
+    filter_ignored_name_patterns,
+)
 
 
 class RoleFilterTests(unittest.TestCase):
@@ -58,6 +62,27 @@ class ManufacturerFilterTests(unittest.TestCase):
         self.assertEqual(
             [device["name"] for device in result], ["without-device-type"]
         )
+
+
+class GlobFilterTests(unittest.TestCase):
+    def test_ignores_device_type_fields_case_insensitively(self) -> None:
+        devices = [
+            {"name": "one", "device_type": {"model": "MX67", "slug": "mx67"}},
+            {"name": "two", "device_type": {"display": "ISR4451-X"}},
+            {"name": "three", "device_type": {"model": "C9300"}},
+            {"name": "unknown", "device_type": None},
+        ]
+        result = filter_ignored_device_types(devices, ("mx*", "ISR????-X"))
+        self.assertEqual([item["name"] for item in result], ["three", "unknown"])
+
+    def test_ignores_device_names_by_glob(self) -> None:
+        devices = [
+            {"name": "WAW-CORE"},
+            {"name": "test-router"},
+            {"name": "access-01"},
+        ]
+        result = filter_ignored_name_patterns(devices, ("*core", "TEST-*"))
+        self.assertEqual([item["name"] for item in result], ["access-01"])
 
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ from textual.widgets import Button, Footer, Header, Input, Label, ListItem, List
 from .cache import Cache
 from .config import Config
 from .editor import editor_command, ensure_config_file, ensure_manual_file
+from .jump_state import save_jump_devices
 from .manual import (
     ManualDevice,
     load_manual_devices,
@@ -154,6 +155,7 @@ class NetBoxSSHApp(App[None]):
         Binding("ctrl+t", "toggle_selection", "Select device"),
         Binding("space", "toggle_selection", "Select device", show=False),
         Binding("ctrl+u", "clear_selection", "Clear selection"),
+        Binding("j", "toggle_jump_host", "Toggle jump host"),
     ]
 
     def __init__(
@@ -161,12 +163,15 @@ class NetBoxSSHApp(App[None]):
         config: Config,
         cache: Cache | None,
         manual_devices: list[ManualDevice] | None = None,
+        jump_devices: set[str] | None = None,
     ) -> None:
         super().__init__()
         self.config = config
         self.cache = cache
         self.manual_devices = list(manual_devices or [])
+        self.jump_devices = set(jump_devices or set())
         self.regions = self._merged_regions()
+        self._apply_jump_state()
         self.views: list[View] = [View("Countries", path=())]
         self.visible_entries: list[Entry] = []
         self.item_entries: dict[int, Entry] = {}
@@ -288,7 +293,12 @@ class NetBoxSSHApp(App[None]):
                 icon = "✓"
             else:
                 icon = "◇" if entry.kind == "device" and entry.value.source == "manual" else icons.get(entry.kind, " ")
-            line.append(f"{icon}  {entry.label}")
+            jump_marker = (
+                "J"
+                if entry.kind == "device" and entry.value.use_jump_host
+                else " "
+            )
+            line.append(f"{icon} {jump_marker}  {entry.label}")
             if entry.detail:
                 line.append(f"    {entry.detail}", style="dim")
             item = ListItem(
@@ -380,6 +390,43 @@ class NetBoxSSHApp(App[None]):
         list_view.index = current_index
         self._set_status("Device selection cleared.")
 
+    async def action_toggle_jump_host(self) -> None:
+        """Trwale przełącza ProxyJump dla wskazanego urządzenia."""
+        list_view = self.query_one(ListView)
+        if list_view.index is None or list_view.index >= len(self.visible_entries):
+            return
+        entry = self.visible_entries[list_view.index]
+        if entry.kind != "device":
+            self._set_status("Jump host can only be set for a device.", "error")
+            return
+        if not self.config.jump_host:
+            self._set_status("Configure ssh.jump_host before marking devices.", "error")
+            return
+        device = entry.value
+        if not device.identifier:
+            self._set_status("This device has no stable identifier.", "error")
+            return
+        was_enabled = device.identifier in self.jump_devices
+        if was_enabled:
+            self.jump_devices.remove(device.identifier)
+        else:
+            self.jump_devices.add(device.identifier)
+        try:
+            save_jump_devices(self._jump_state_path(), self.jump_devices)
+        except OSError as error:
+            if was_enabled:
+                self.jump_devices.add(device.identifier)
+            else:
+                self.jump_devices.discard(device.identifier)
+            self._set_status(f"Could not save jump-host setting: {error}", "error")
+            return
+        self._apply_jump_state()
+        current_index = list_view.index
+        await self._render_entries()
+        list_view.index = current_index
+        state = "disabled" if was_enabled else "enabled"
+        self._set_status(f"Jump host {state} for {device.name}.", "success")
+
     def _connect_selected(self) -> None:
         """Otwiera wiele sesji tylko w kartach iTerm2."""
         devices = list(self.selected_devices.values())
@@ -391,8 +438,8 @@ class NetBoxSSHApp(App[None]):
             )
             return
         try:
-            open_iterm_tabs(devices)
-        except (OSError, RuntimeError) as error:
+            open_iterm_tabs(devices, self.config.jump_host)
+        except (OSError, RuntimeError, ValueError) as error:
             self._set_status(f"Could not start SSH: {error}", "error")
             return
         self.selected_devices.clear()
@@ -494,6 +541,7 @@ class NetBoxSSHApp(App[None]):
             return
         self.manual_devices = manual_devices
         self.regions = self._merged_regions()
+        self._apply_jump_state()
         self.views = [View("Countries", path=())]
         self.selected_devices.clear()
         self.run_worker(self._reset_and_render(), exclusive=True)
@@ -545,7 +593,16 @@ class NetBoxSSHApp(App[None]):
         current_node = self.views[-1].node
         assert current_node is not None
         current_node.devices.append(
-            Device(manual.name, manual.role, manual.target, source="manual")
+            Device(
+                manual.name,
+                manual.role,
+                manual.target,
+                source="manual",
+                identifier=(
+                    "manual:"
+                    + "/".join((*manual.location_path, manual.name)).casefold()
+                ),
+            )
         )
         current_node.devices.sort(
             key=lambda device: (device.role.casefold(), device.name.casefold())
@@ -571,6 +628,7 @@ class NetBoxSSHApp(App[None]):
         self.syncing = False
         self.cache = cache
         self.regions = self._merged_regions()
+        self._apply_jump_state()
         self.views = [View("Countries", path=())]
         self.run_worker(self._reset_and_render(), exclusive=True)
         country_count = sum(len(region.children) for region in cache.regions)
@@ -585,6 +643,23 @@ class NetBoxSSHApp(App[None]):
             self.cache.regions if self.cache else [], self.manual_devices
         )
 
+    def _jump_state_path(self):
+        return self.config.jump_state_path or self.config.manual_path.with_name(
+            "jump-host-devices.json"
+        )
+
+    def _apply_jump_state(self) -> None:
+        def visit(node: Node) -> None:
+            for device in node.devices:
+                device.use_jump_host = bool(
+                    device.identifier and device.identifier in self.jump_devices
+                )
+            for child in node.children:
+                visit(child)
+
+        for region in self.regions:
+            visit(region)
+
     def _connect_ssh(self, device: Device) -> None:
         environment = os.environ.copy()
         # Proces SSH nie potrzebuje sekretów NetBoxa i nie powinien ich dziedziczyć.
@@ -595,8 +670,8 @@ class NetBoxSSHApp(App[None]):
             # Na czas SSH oddajemy terminal klientowi systemowemu, a po jego
             # zakończeniu Textual odtwarza poprzedni ekran.
             with self.suspend():
-                results = run_system_ssh([device])
-        except OSError as error:
+                results = run_system_ssh([device], self.config.jump_host)
+        except (OSError, ValueError) as error:
             self._set_status(f"Could not start ssh: {error}", "error")
         else:
             return_code = results[0][1]

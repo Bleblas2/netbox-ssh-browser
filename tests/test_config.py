@@ -28,6 +28,7 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(config.device_statuses, ())
             self.assertEqual(config.ignored_manufacturers, ())
             self.assertEqual(config.manual_path.name, "manual.json")
+            self.assertEqual(config.jump_state_path.name, "jump-host-devices.json")
 
     def test_default_reads_all_device_roles(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -42,6 +43,22 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(config.device_roles, ())
             self.assertEqual(config.device_statuses, ())
             self.assertEqual(config.ignored_manufacturers, ())
+
+    def test_loads_jump_host_and_glob_filters(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "config.toml").write_text(
+                '[sync]\nignored_device_types = ["MX*"]\n'
+                'ignored_name_patterns = ["*CORE"]\n[ssh]\njump_host = "jump-alias"\n',
+                encoding="utf-8",
+            )
+            with patch.dict(os.environ, {"XDG_CONFIG_HOME": str(root / "missing")}, clear=True), patch(
+                "pathlib.Path.cwd", return_value=root
+            ):
+                config = Config.from_env()
+            self.assertEqual(config.ignored_device_types, ("MX*",))
+            self.assertEqual(config.ignored_name_patterns, ("*CORE",))
+            self.assertEqual(config.jump_host, "jump-alias")
 
     def test_uses_local_config_when_user_config_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

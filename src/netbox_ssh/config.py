@@ -21,6 +21,10 @@ class Config:
     device_roles: tuple[str, ...]
     device_statuses: tuple[str, ...]
     ignored_manufacturers: tuple[str, ...]
+    ignored_device_types: tuple[str, ...] = ()
+    ignored_name_patterns: tuple[str, ...] = ()
+    jump_host: str | None = None
+    jump_state_path: Path | None = None
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -47,6 +51,8 @@ class Config:
         file_config = _read_config(config_path)
         netbox = file_config.get("netbox", {})
         sync = file_config.get("sync", {})
+        ssh = file_config.get("ssh", {})
+        jump_host = _clean_ssh_value(ssh.get("jump_host"), "ssh.jump_host")
         return cls(
             # Zmienne powłoki celowo nadpisują ustawienia zapisane w TOML.
             netbox_url=_clean_url(os.environ.get("NETBOX_URL") or netbox.get("url")),
@@ -58,6 +64,7 @@ class Config:
             ),
             cache_path=cache_home / "devices.json",
             manual_path=data_home / "manual.json",
+            jump_state_path=data_home / "jump-host-devices.json",
             config_path=config_path,
             device_roles=tuple(str(role) for role in sync.get("device_roles", [])),
             device_statuses=tuple(
@@ -67,6 +74,13 @@ class Config:
                 str(manufacturer)
                 for manufacturer in sync.get("ignored_manufacturers", [])
             ),
+            ignored_device_types=tuple(
+                str(value) for value in sync.get("ignored_device_types", [])
+            ),
+            ignored_name_patterns=tuple(
+                str(value) for value in sync.get("ignored_name_patterns", [])
+            ),
+            jump_host=jump_host,
         )
 
     def validate_sync(self) -> None:
@@ -92,6 +106,17 @@ def _clean_url(value: str | None) -> str | None:
 
 def _as_bool(value: str) -> bool:
     return value.lower() not in {"0", "false", "no", "off"}
+
+
+def _clean_ssh_value(value: Any, setting: str) -> str | None:
+    if value is None or not str(value).strip():
+        return None
+    result = str(value).strip()
+    if result.startswith("-") or any(character.isspace() for character in result):
+        raise ValueError(
+            f"{setting} must be a hostname, IP, or SSH alias without whitespace"
+        )
+    return result
 
 
 def _read_config(path: Path) -> dict[str, Any]:
