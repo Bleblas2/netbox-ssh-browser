@@ -22,6 +22,7 @@ the background.
 
 ## Contents
 
+- [Recent Changes](#recent-changes)
 - [What It Does](#what-it-does)
 - [Safety Model](#safety-model)
 - [Requirements](#requirements)
@@ -36,6 +37,26 @@ the background.
 - [Compatibility](#compatibility)
 - [Acknowledgements](#acknowledgements)
 
+## Recent Changes
+
+Recent updates through version **0.1.4** include:
+
+- **SSH jump host support:** configure one jump host and press `J` to enable
+  or disable it for individual devices. Choices persist across application
+  restarts and apply to both single-device sessions and iTerm2 multi-tab launches.
+- **Interactive SSH through a jump host:** the target SSH client runs on the
+  jump host, allowing password prompts even when TCP forwarding is disabled.
+  See [SSH jump host](#ssh-jump-host) for setup and connection requirements.
+- **Additional inventory filters:** exclude device types with
+  `ignored_device_types` and device names with `ignored_name_patterns`, using
+  case-insensitive glob patterns such as `MX*` and `TEST-*`.
+- **Navigation and sync fixes:** returning from a site or branch restores the
+  highlighted entry, empty top-level regions are pruned, and unnamed NetBox
+  devices use their display value or object ID as a fallback label.
+
+The latest CI configuration runs automated tests on macOS and Ubuntu; Windows
+remains manually tested.
+
 ## What It Does
 
 - Reads regions, sites, and devices from the NetBox REST API.
@@ -46,6 +67,7 @@ the background.
 - Connects to `primary_ip4`, then `primary_ip6`, and finally the device name
   when no primary IP is assigned.
 - Uses the current shell user and the existing OpenSSH configuration.
+- Supports a configurable SSH jump host with persistent per-device selection.
 - Keeps the last successful inventory available when NetBox is offline.
 
 ## Safety Model
@@ -131,7 +153,7 @@ pipx install netbox-ssh-browser
 nssh --version
 ```
 
-The expected version output is similar to `nssh 0.1.2`. Scoop is an optional
+The expected version output is similar to `nssh 0.1.4`. Scoop is an optional
 alternative, but `scoop install pipx` works only when Scoop has already been
 installed separately.
 
@@ -272,6 +294,8 @@ device_roles = [
 
 ### SSH jump host
 
+Add the jump host to your active `config.toml` (press `C` to edit it):
+
 ```toml
 [ssh]
 jump_host = "jump-host"
@@ -285,6 +309,26 @@ connects to the jump host and runs a second SSH client there (`ssh -tt jump-host
 local client can authenticate to the jump host with a key, while the target can
 prompt interactively for a password. Passwords are never stored by the
 application.
+
+To connect through the jump host:
+
+1. Configure `ssh.jump_host` and save the file.
+2. Highlight a NetBox or manual device and press `J`. A `J` marker appears next
+   to the device.
+3. Press `Enter` to connect, or include the device in an iTerm2 multi-tab launch.
+4. Press `J` again to return that device to direct SSH.
+
+Selections are stored in `jump-host-devices.json` alongside
+[`manual.json`](#manual-inventory) and survive restarts and inventory syncs.
+Devices without the marker continue to connect directly. Leaving `jump_host`
+empty disables the ability to mark devices for jump-host connections.
+
+The jump host must have an `ssh` client installed and be able to reach the
+target device. The second SSH connection uses the jump host's SSH configuration,
+known-hosts file, and authentication setup. Target hostnames are resolved from
+the jump host. For example, `jump_host = "admin@bastion.example.com"` connects
+to the bastion as `admin`; target authentication is handled by the SSH client
+running there.
 
 ## First Run
 
@@ -468,8 +512,8 @@ The application has been manually tested on:
 - Ubuntu under WSL2 on Windows,
 - native Windows with PowerShell, Windows Terminal, and Windows OpenSSH.
 
-The automated test suite additionally runs on macOS, Ubuntu, and Windows with
-Python 3.11 and 3.13.
+The automated test suite runs on macOS and Ubuntu with Python 3.11 and 3.13.
+Windows is currently excluded from the CI test matrix.
 
 ## Acknowledgements
 
