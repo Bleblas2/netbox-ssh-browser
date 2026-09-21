@@ -11,7 +11,7 @@ unavailable. Hosts missing from NetBox can be added to a separate manual
 inventory. The application reads NetBox data without modifying it and does
 not store SSH credentials.
 
-![NetBox SSH Browser demonstration](docs/images/netbox-ssh-browser-demo.gif)
+![NetBox SSH Browser demonstration](docs/images/netbox-ssh-browser-walkthrough.gif)
 
 ## Contents
 
