@@ -1,22 +1,15 @@
 # NetBox SSH Browser
 
-NetBox SSH Browser gives network engineers fast, organized SSH access to large
-device inventories without maintaining terminal bookmarks or copying host
-addresses from NetBox. It turns NetBox data into an interactive terminal
-browser organized by region, country, city, branch, Device Role, and device, so
-the right host remains only a few keystrokes away.
+NetBox SSH Browser is a terminal application for browsing NetBox devices and
+opening SSH sessions. It groups devices by location and role, with search by
+name or IP address. Connections use the system OpenSSH client, directly or
+through a configured jump host. On macOS, iTerm2 can open selected devices in
+separate tabs.
 
-The application is especially useful in enterprise networks where devices and
-primary IP addresses change over time. A manual **Sync from NetBox** refreshes
-the local inventory on demand, while a separate manual inventory lets engineers
-add hosts that are not yet present in NetBox. Devices can be searched by name
-or address, opened directly with the system OpenSSH client, or selected in
-batches and launched in separate iTerm2 tabs on macOS.
-
-NetBox SSH Browser keeps the last successful inventory in a private local cache
-for quick access when NetBox is unavailable. It does not implement an SSH
-client, store SSH credentials, modify NetBox, or synchronize automatically in
-the background.
+Inventory is synchronized manually and cached locally for use when NetBox is
+unavailable. Hosts missing from NetBox can be added to a separate manual
+inventory. The application reads NetBox data without modifying it and does
+not store SSH credentials.
 
 ![NetBox SSH Browser demonstration](docs/images/netbox-ssh-browser-demo.gif)
 
@@ -39,23 +32,12 @@ the background.
 
 ## Recent Changes
 
-Recent updates through version **0.1.4** include:
+- SSH jump host with saved per-device selection (`J`). The target SSH client
+  runs on the jump host and supports password prompts without TCP forwarding.
+- Device type and name filters using glob patterns, such as `MX*` and `TEST-*`.
+- Navigation restores the selected entry when returning from a site or branch.
 
-- **SSH jump host support:** configure one jump host and press `J` to enable
-  or disable it for individual devices. Choices persist across application
-  restarts and apply to both single-device sessions and iTerm2 multi-tab launches.
-- **Interactive SSH through a jump host:** the target SSH client runs on the
-  jump host, allowing password prompts even when TCP forwarding is disabled.
-  See [SSH jump host](#ssh-jump-host) for setup and connection requirements.
-- **Additional inventory filters:** exclude device types with
-  `ignored_device_types` and device names with `ignored_name_patterns`, using
-  case-insensitive glob patterns such as `MX*` and `TEST-*`.
-- **Navigation and sync fixes:** returning from a site or branch restores the
-  highlighted entry, empty top-level regions are pruned, and unnamed NetBox
-  devices use their display value or object ID as a fallback label.
-
-The latest CI configuration runs automated tests on macOS and Ubuntu; Windows
-remains manually tested.
+See [CHANGELOG.md](CHANGELOG.md) for release details.
 
 ## What It Does
 
@@ -99,8 +81,7 @@ Bearer authentication; legacy tokens use Token authentication.
 
 ## Installation
 
-The recommended installation method is `pipx`. It gives the application an
-isolated environment and automatically exposes the `nssh` command on `PATH`.
+Install with `pipx` to keep dependencies isolated and add `nssh` to `PATH`.
 
 ### macOS
 
@@ -134,8 +115,8 @@ Install Python 3.13 from WinGet in PowerShell:
 winget install --exact --id Python.Python.3.13
 ```
 
-Close every PowerShell window and open PowerShell again so that the `py`
-launcher is added to `PATH`. Confirm the installation, then install `pipx`:
+Close all PowerShell windows and reopen PowerShell to refresh `PATH`.
+Check Python and install `pipx`:
 
 ```powershell
 py --version
@@ -143,9 +124,7 @@ py -m pip install --user pipx
 py -m pipx ensurepath
 ```
 
-Close PowerShell and open it again a second time so that `pipx` and its
-application directory are added to `PATH`. Then install and verify NetBox SSH
-Browser:
+Reopen PowerShell again to pick up the `pipx` paths, then install the package:
 
 ```powershell
 pipx --version
@@ -153,9 +132,8 @@ pipx install netbox-ssh-browser
 nssh --version
 ```
 
-The expected version output is similar to `nssh 0.1.4`. Scoop is an optional
-alternative, but `scoop install pipx` works only when Scoop has already been
-installed separately.
+`nssh --version` prints the installed package version. If you use Scoop,
+you can install pipx with `scoop install pipx` instead.
 
 ### Verify, upgrade, and uninstall
 
@@ -173,7 +151,7 @@ stored under the platform-specific `PIPX_HOME`:
 - Linux: `~/.local/share/pipx/venvs/netbox-ssh-browser`
 - Windows: `%LOCALAPPDATA%\pipx\venvs\netbox-ssh-browser`
 
-Use these commands to see the exact resolved locations on any machine:
+Check the paths used by your installation:
 
 ```bash
 pipx environment --value PIPX_HOME
@@ -190,7 +168,7 @@ source .venv/bin/activate
 python -m pip install -e .
 ```
 
-You can also expose the development command with a symbolic link:
+To run the development version without activating the environment, add a symlink:
 
 ```bash
 ln -s \
@@ -206,22 +184,20 @@ For release preparation and PyPI publication, see
 
 ## Configuration
 
-Store the NetBox URL and API token in the private user configuration:
+Set the NetBox URL and API token in `config.toml`:
 
 ```toml
 [netbox]
 url = "https://netbox.example.com"
 api_token = "your-token"
 verify_ssl = true
-
 ```
 
-The token must contain only its value, without the `Bearer` or `Token` prefix.
-The application selects the correct authorization scheme. `NETBOX_URL` and
-`NETBOX_API_TOKEN` remain optional environment overrides.
+Enter the token without a `Bearer` or `Token` prefix; the application adds it.
+`NETBOX_URL` and `NETBOX_API_TOKEN` override the values in the file.
 
-Start `nssh` and press `C` to create and edit the private user configuration.
-On macOS and Linux it can also be initialized manually:
+Press `C` in `nssh` to create or edit the configuration. On macOS and Linux,
+you can also create it manually:
 
 ```bash
 mkdir -p ~/.config/netbox-ssh-browser
@@ -229,13 +205,13 @@ nano ~/.config/netbox-ssh-browser/config.toml
 chmod 600 ~/.config/netbox-ssh-browser/config.toml
 ```
 
-The configuration file can also be selected explicitly:
+To use a different file:
 
 ```bash
 export NETBOX_SSH_CONFIG="/path/to/config.toml"
 ```
 
-Configuration precedence is:
+Configuration files are checked in this order:
 
 1. `NETBOX_SSH_CONFIG`.
 2. `~/.config/netbox-ssh-browser/config.toml`.
@@ -246,23 +222,16 @@ configuration private with mode `0600` and never commit a real token.
 
 ### NetBox settings
 
-```toml
-[netbox]
-url = "https://netbox.example.com"
-verify_ssl = true
-```
-
-For a trusted development environment with a self-signed certificate,
-certificate verification can be disabled:
+TLS certificate verification is enabled by default. For a development instance
+with a self-signed certificate, you can disable it:
 
 ```toml
 [netbox]
 verify_ssl = false
 ```
 
-Disabling verification reduces transport security. Production deployments
-should use `verify_ssl = true` with a valid certificate or trusted corporate
-CA.
+For production, keep `verify_ssl = true` and use a certificate trusted by the
+client.
 
 ### Inventory filters
 
@@ -294,41 +263,35 @@ device_roles = [
 
 ### SSH jump host
 
-Add the jump host to your active `config.toml` (press `C` to edit it):
+Press `C` and set the jump host in `config.toml`:
 
 ```toml
 [ssh]
 jump_host = "jump-host"
 ```
 
-The value may be a hostname, IP address, `user@host`, or an alias defined in
-`~/.ssh/config`. Highlight a device and press `J` to persistently enable or
-disable the jump host for it. Marked devices display `J`. The application first
-connects to the jump host and runs a second SSH client there (`ssh -tt jump-host
-"ssh target"`). This supports jump hosts that prohibit TCP forwarding: the
-local client can authenticate to the jump host with a key, while the target can
-prompt interactively for a password. Passwords are never stored by the
-application.
+Use a hostname, IP address, `user@host`, or an alias from `~/.ssh/config`.
+For example, `admin@bastion.example.com` connects to the bastion as `admin`.
 
-To connect through the jump host:
+Highlight a NetBox or manual device and press `J` to enable the jump host.
+Press `Enter` to connect, or select devices for an iTerm2 multi-tab launch.
+Press `J` again to use direct SSH. An empty `jump_host` setting prevents new
+selections.
 
-1. Configure `ssh.jump_host` and save the file.
-2. Highlight a NetBox or manual device and press `J`. A `J` marker appears next
-   to the device.
-3. Press `Enter` to connect, or include the device in an iTerm2 multi-tab launch.
-4. Press `J` again to return that device to direct SSH.
+Devices marked `J` use the jump host; others connect directly. Choices are saved
+in `jump-host-devices.json` alongside [`manual.json`](#manual-inventory) and
+survive restarts and inventory syncs.
 
-Selections are stored in `jump-host-devices.json` alongside
-[`manual.json`](#manual-inventory) and survive restarts and inventory syncs.
-Devices without the marker continue to connect directly. Leaving `jump_host`
-empty disables the ability to mark devices for jump-host connections.
+The connection runs a second SSH client on the jump host:
 
-The jump host must have an `ssh` client installed and be able to reach the
-target device. The second SSH connection uses the jump host's SSH configuration,
-known-hosts file, and authentication setup. Target hostnames are resolved from
-the jump host. For example, `jump_host = "admin@bastion.example.com"` connects
-to the bastion as `admin`; target authentication is handled by the SSH client
-running there.
+```bash
+ssh -tt jump-host "ssh target"
+```
+
+The jump host needs an SSH client and network access to the target. Target DNS
+resolution, SSH settings, host keys, and authentication are handled there.
+This works when TCP forwarding is disabled and allows password prompts on the
+target connection. The application does not store passwords.
 
 ## First Run
 
@@ -339,11 +302,9 @@ running there.
    nssh
    ```
 
-3. The initial device list is empty because synchronization is never automatic.
-4. Press `S` to sync inventory from NetBox.
-5. Review the status bar for connection, authentication, permission, SSL, and
-   timeout errors.
-6. Select a country, branch, and device with the arrow keys and Enter.
+3. Press `S` to load inventory from NetBox. The list is empty until the first sync.
+4. Check the status bar for errors.
+5. Use the arrow keys and `Enter` to browse locations and connect to a device.
 
 The `/api/status/` endpoint is checked first. Inventory is saved only after all
 required API requests and filters complete successfully.
@@ -365,7 +326,7 @@ required API requests and filters complete successfully.
 | `M` | Edit `manual.json` in the shell editor |
 | `Q` | Quit |
 
-Non-selectable headings reduce unnecessary navigation steps:
+Location and role headings group the entries:
 
 ```text
 Region Group A
@@ -381,40 +342,34 @@ Access Switch
   switch-02    switch-02.example.com
 ```
 
-The headings are skipped by arrow-key navigation. Selecting a device
-immediately suspends the TUI and starts the system SSH client. When SSH exits,
-the previous TUI view is restored. Returning from a site or branch also restores
-the previously highlighted entry, which makes sequential device checks easier.
+Arrow keys skip headings. Opening a device suspends the browser and starts SSH;
+when the session ends, the browser returns to the same view. Going back from a
+site or branch restores the previous selection.
 
-On macOS in iTerm2, select devices with `Ctrl+T` (or `Space`) and press `Enter`
-to open every selected SSH connection
-in a separate tab of the current iTerm2 window. The `nssh` tab remains open.
-The first launch may cause macOS to request permission to automate iTerm2.
-`Ctrl+U` clears the selection. Single-device SSH remains terminal-independent.
-On Linux, WSL, Windows, and macOS terminals other than iTerm2, only a single
-system SSH session is available; attempting a multi-session launch displays a
-clear compatibility message.
+In iTerm2 on macOS, select devices with `Ctrl+T` or `Space`, then press `Enter`
+to open each connection in a separate tab. The `nssh` tab stays open. macOS may
+ask for permission to automate iTerm2 on the first launch. `Ctrl+U` clears the
+selection. Other terminals support one SSH session at a time and show a message
+if you try to open multiple sessions.
 
-`C` and `M` temporarily suspend the TUI and launch `$VISUAL`, then `$EDITOR`,
-or `nano` when neither variable is configured. The editor process does not
-inherit the NetBox URL or API token. Configuration and manual inventory are
-reloaded after the editor exits successfully. Missing files are initialized
-with safe minimal content before the editor starts.
+`C` and `M` open files in `$VISUAL`, then `$EDITOR` if set. The fallback is
+`nano` on macOS/Linux and `notepad` on Windows. Missing files are created before
+opening the editor; changes are reloaded after a successful exit. The editor
+process does not inherit the NetBox URL or API token.
 
 ## Manual Inventory
 
-Manual devices are stored independently from the NetBox cache. Navigate to a
-specific branch and press `+`, then provide:
+Manual devices are stored in `manual.json`, separately from the NetBox cache.
+Open a branch, press `+`, and enter:
 
 - device name,
 - IP address or hostname,
 - Device Role.
 
-The current breadcrumb supplies the region, country, city, and branch. Manual
-devices use a `◇` symbol, appear in global `/` search, and connect through the
-same system SSH client. NetBox devices remain read-only in the application.
+The current location supplies the region, country, city, and branch. Manual
+devices are marked `◇` and included in `/` search and SSH connections.
 
-The file can also be edited manually. Its format is:
+To edit the file directly, use this format:
 
 ```json
 {
@@ -433,11 +388,11 @@ The file can also be edited manually. Its format is:
 }
 ```
 
-Paths missing from the NetBox cache are created in memory from `manual.json`.
-Synchronization never modifies this file. Invalid JSON or an unsupported format
-causes a clear startup error instead of silently discarding entries.
+Missing locations are added to the displayed tree from `manual.json`. Sync does
+not modify this file. Invalid JSON or an unsupported format stops startup with
+an error.
 
-`platformdirs` selects the persistent user-data location:
+The file is stored in the user data directory:
 
 - macOS: `~/Library/Application Support/netbox-ssh-browser/manual.json`
 - Linux: `~/.local/share/netbox-ssh-browser/manual.json`
@@ -464,7 +419,7 @@ The directory is mode `0700` and the file is mode `0600` where supported.
 
 ## Local Cache
 
-The application uses `platformdirs` to select the native per-user cache path:
+The cache is stored per user:
 
 - macOS: `~/Library/Caches/netbox-ssh-browser/devices.json`
 - Linux: `~/.cache/netbox-ssh-browser/devices.json`
@@ -474,13 +429,12 @@ The JSON cache contains the sync timestamp, location tree, Device Roles, device
 names, and primary IP addresses. It never contains the NetBox API token or SSH
 credentials.
 
-The current cache format is version 2. Unsupported or malformed cache files are
-treated as missing. There is no migration from previous cache locations or
-formats; press `S` to build a new cache.
+The cache format is version 2. Invalid or unsupported cache files are ignored.
+Old formats and paths are not migrated; press `S` to rebuild the cache.
 
 ## Development
 
-The implementation is split by responsibility under `src/netbox_ssh`:
+Source files in `src/netbox_ssh`:
 
 - `cli.py` loads configuration and starts the Textual application.
 - `config.py` merges TOML settings and environment variables.
@@ -506,14 +460,13 @@ python -m compileall -q src tests
 See [COMPATIBILITY.md](COMPATIBILITY.md) for the supported Python, operating
 system, terminal, and NetBox versions.
 
-The application has been manually tested on:
+Manually tested on:
 
 - macOS on Apple silicon (MacBook Pro M5 Pro) with iTerm2,
 - Ubuntu under WSL2 on Windows,
 - native Windows with PowerShell, Windows Terminal, and Windows OpenSSH.
 
-The automated test suite runs on macOS and Ubuntu with Python 3.11 and 3.13.
-Windows is currently excluded from the CI test matrix.
+CI runs the test suite on macOS, Ubuntu, and Windows with Python 3.11 and 3.13.
 
 ## Acknowledgements
 
