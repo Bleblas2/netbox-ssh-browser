@@ -4,7 +4,7 @@ Screenshots from the NetBox demo instance, ordered by filename.
 
 ## Animated demo
 
-![NetBox SSH Browser walkthrough](netbox-ssh-browser-demo.gif)
+![NetBox SSH Browser walkthrough](netbox-ssh-browser-walkthrough.gif)
 
 The animation combines the 13 screenshots below at 1600 × 846 pixels, with
 3 seconds per frame and continuous looping. Images keep their original
