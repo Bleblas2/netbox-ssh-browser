@@ -60,6 +60,10 @@ python -m build
 python -m twine check dist/*
 ```
 
+Install the wheel with dependencies, including `tomlkit` for preserving
+configuration comments during automatic updates. Use `--no-deps` only when all
+dependencies declared in `pyproject.toml` are already installed.
+
 Test the wheel rather than the source checkout:
 
 ```bash

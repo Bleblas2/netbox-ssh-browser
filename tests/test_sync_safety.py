@@ -31,6 +31,37 @@ class SyncSafetyTests(unittest.TestCase):
             self.assertEqual(load_cache(config.cache_path), cache)
             self.assertNotIn("dns.example.test", config.cache_path.read_text())
 
+    def test_rejected_pagination_keeps_previous_cache_unchanged(self):
+        requests = []
+
+        def handler(request):
+            requests.append(request)
+            if request.url.path == "/api/status/":
+                return httpx.Response(200, json={})
+            return httpx.Response(200, json={
+                "results": [{"id": 99, "name": "New region", "parent": None}],
+                "next": "https://other.example/collect",
+            })
+
+        with tempfile.TemporaryDirectory() as directory:
+            config = replace(make_config(Path(directory)), netbox_url="https://netbox.example")
+            previous = save_cache(config.cache_path, normalize_inventory(
+                [], [{"id": 1, "name": "Office", "region": None}],
+                [{"id": 2, "name": "core", "site": 1}],
+            ))
+            before = config.cache_path.read_bytes()
+            client_class = httpx.Client
+            with patch("netbox_ssh.netbox.httpx.Client", side_effect=lambda **kwargs: client_class(
+                transport=httpx.MockTransport(handler), **kwargs,
+            )):
+                with self.assertRaises(httpx.RequestError) as error:
+                    synchronize(config)
+            self.assertEqual(config.cache_path.read_bytes(), before)
+            self.assertEqual(load_cache(config.cache_path), previous)
+            self.assertEqual(len(requests), 2)
+            self.assertTrue(all(request.url.host == "netbox.example" for request in requests))
+            self.assertIn("configured NetBox origin", describe_sync_error(error.exception))
+            self.assertNotIn(config.api_token, describe_sync_error(error.exception))
 
 
 if __name__ == "__main__":
