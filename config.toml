@@ -8,6 +8,13 @@ url = "https://netbox.example.com"
 verify_ssl = true
 
 [sync]
+# Try these address sources in order; omitted sources are never used.
+# fqdn uses the NetBox device name as a DNS/SSH target only when listed.
+# Devices without a selected address are omitted. Empty [] omits all devices.
+# Press S after changing this setting. Manual device targets are unchanged.
+# Example: address_order = ["oob_ip", "primary_ip4"]
+address_order = ["primary_ip4", "primary_ip6", "oob_ip", "fqdn"]
+
 # NetBox status slugs. An empty list [] includes devices with any status.
 device_statuses = ["active"]
 
@@ -27,3 +34,9 @@ device_roles = [
 [ssh]
 # Hostname, IP, user@host, or an alias from ~/.ssh/config.
 jump_host = ""
+
+[tree]
+# auto: use regions when present; otherwise list sites. Or choose regions / sites.
+layout = "auto"
+# Group name for sites without a region in the regions layout.
+unassigned_group = "Other sites"

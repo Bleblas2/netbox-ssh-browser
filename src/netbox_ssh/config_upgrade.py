@@ -11,8 +11,16 @@ from pathlib import Path
 import tomlkit
 from tomlkit.items import InlineTable
 
+from .inventory import DEFAULT_ADDRESS_ORDER
+
 
 _DEFAULTS = {
+    "sync": {
+        "address_order": (
+            list(DEFAULT_ADDRESS_ORDER),
+            "First available source wins; fqdn uses device.name. Missing addresses are omitted. Press S after changes.",
+        ),
+    },
     "tree": {
         "layout": ("auto", "auto: regions when available, otherwise sites; or choose regions / sites."),
         "unassigned_group": ("Other sites", "Group for sites without an available region in the regions layout."),

@@ -19,7 +19,7 @@ def synchronize(config: Config) -> tuple[Cache, int]:
     devices = filter_ignored_manufacturers(devices, config.ignored_manufacturers)
     devices = filter_ignored_device_types(devices, config.ignored_device_types)
     devices = filter_ignored_name_patterns(devices, config.ignored_name_patterns)
-    inventory = normalize_inventory(regions, sites, devices)
+    inventory = normalize_inventory(regions, sites, devices, config.address_order)
     return save_cache(config.cache_path, inventory), len(devices)
 
 

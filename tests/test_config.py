@@ -98,6 +98,27 @@ class ConfigTests(unittest.TestCase):
             ):
                 self.assertEqual(Config.from_env().api_token, "environment-token")
 
+    def test_address_order_defaults_custom_and_validation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.toml"
+            with patch.dict(os.environ, {"NETBOX_SSH_CONFIG": str(path)}, clear=True):
+                path.write_text("")
+                self.assertEqual(Config.from_env().address_order,
+                                 ("primary_ip4", "primary_ip6", "oob_ip", "fqdn"))
+                for value, expected in (
+                    ('["oob_ip", "primary_ip4"]', ("oob_ip", "primary_ip4")),
+                    ('["fqdn"]', ("fqdn",)), ('[]', ()),
+                ):
+                    with self.subTest(value=value):
+                        path.write_text('[sync]\naddress_order = ' + value)
+                        self.assertEqual(Config.from_env().address_order, expected)
+                for value in ('"oob_ip"', '["unknown"]', '["oob_ip", "oob_ip"]',
+                              '[3]', '[{}]', 'true'):
+                    with self.subTest(value=value):
+                        path.write_text('[sync]\naddress_order = ' + value)
+                        with self.assertRaisesRegex(ValueError, "sync.address_order"):
+                            Config.from_env()
+
     def test_rejects_non_table_sections(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.toml"

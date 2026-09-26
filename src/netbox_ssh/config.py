@@ -8,6 +8,7 @@ from typing import Any
 
 from platformdirs import user_cache_path, user_data_path
 
+from .inventory import DEFAULT_ADDRESS_ORDER
 from .config_upgrade import upgrade_config_file
 
 @dataclass(frozen=True)
@@ -29,6 +30,7 @@ class Config:
     jump_state_path: Path | None = None
     tree_layout: str = "auto"
     tree_unassigned_group: str = "Other sites"
+    address_order: tuple[str, ...] = DEFAULT_ADDRESS_ORDER
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -61,6 +63,15 @@ class Config:
             sections[name] = value
         netbox = sections["netbox"]
         sync = sections["sync"]
+        address_order = sync.get("address_order", list(DEFAULT_ADDRESS_ORDER))
+        if (not isinstance(address_order, list)
+                or any(not isinstance(value, str) or value not in DEFAULT_ADDRESS_ORDER
+                       for value in address_order)
+                or len(set(address_order)) != len(address_order)):
+            raise ValueError(
+                "sync.address_order must be an array of unique field names: "
+                "primary_ip4, primary_ip6, oob_ip, fqdn"
+            )
         ssh = sections["ssh"]
         tree = sections["tree"]
         layout = tree.get("layout", "auto")
@@ -97,6 +108,7 @@ class Config:
             ignored_name_patterns=tuple(
                 str(value) for value in sync.get("ignored_name_patterns", [])
             ),
+            address_order=tuple(address_order),
             jump_host=jump_host,
             tree_layout=layout,
             tree_unassigned_group=unassigned_group.strip(),

@@ -15,6 +15,12 @@ api_token = ""
 verify_ssl = true
 
 [sync]
+# Try these address sources in order; omitted sources are never used.
+# fqdn uses the NetBox device name as a DNS/SSH target only when listed.
+# Devices without a selected address are omitted. Empty [] omits all NetBox devices.
+# Press S after changing this setting. Manual device targets are unchanged.
+# Example: address_order = ["oob_ip", "primary_ip4"]
+address_order = ["primary_ip4", "primary_ip6", "oob_ip", "fqdn"]
 # Empty [] imports devices with any status.
 # Example: device_statuses = ["active", "planned", "staged"]
 device_statuses = ["active"]
