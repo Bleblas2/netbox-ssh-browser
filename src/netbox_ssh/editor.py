@@ -31,6 +31,15 @@ ignored_name_patterns = []
 # Example: device_roles = ["Router", "Core Switch", "Distribution Switch"]
 device_roles = []
 
+[tree]
+# auto: use regions when present in cached or manual inventory; otherwise list sites.
+# regions: preserve the region, country, and location hierarchy.
+# sites: list sites directly, regardless of their region assignments.
+# Missing layout settings default to auto.
+layout = "auto"
+# Group name for locations without a region in the regions layout.
+unassigned_group = "Other sites"
+
 [ssh]
 # Hostname, IP, user@host, or an alias from ~/.ssh/config.
 jump_host = ""

@@ -98,6 +98,75 @@ class ConfigTests(unittest.TestCase):
             ):
                 self.assertEqual(Config.from_env().api_token, "environment-token")
 
+    def test_rejects_non_table_sections(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.toml"
+            with patch.dict(os.environ, {"NETBOX_SSH_CONFIG": str(path)}, clear=True):
+                for section in ("netbox", "sync", "ssh", "tree"):
+                    for value in ('"wrong"', "123", "[]"):
+                        with self.subTest(section=section, value=value):
+                            content = f"{section} = {value}\n"
+                            path.write_text(content)
+                            with self.assertRaisesRegex(ValueError, f"{section} must be a TOML table"):
+                                Config.from_env()
+                            self.assertEqual(path.read_text(), content)
+
+    def test_empty_xdg_config_home_uses_home_config_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home = root / "home"
+            expected = home / ".config" / "netbox-ssh-browser" / "config.toml"
+            expected.parent.mkdir(parents=True)
+            expected.write_text('[tree]\nlayout = "sites"\n', encoding="utf-8")
+            with patch.dict(os.environ, {"XDG_CONFIG_HOME": "", "XDG_CACHE_HOME": str(root / "cache")}, clear=True), patch(
+                "netbox_ssh.config.Path.home", return_value=home
+            ), patch("netbox_ssh.config.Path.cwd", return_value=root):
+                config = Config.from_env()
+            self.assertEqual(config.config_path, expected)
+            self.assertEqual(config.tree_layout, "sites")
+
+    def test_config_repr_does_not_include_api_token(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.toml"
+            path.write_text('[netbox]\napi_token = "never-print-this-token"\n')
+            with patch.dict(os.environ, {"NETBOX_SSH_CONFIG": str(path)}, clear=True):
+                config = Config.from_env()
+            self.assertNotIn("never-print-this-token", repr(config))
+
+    def test_jump_host_config_must_be_text(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.toml"
+            for value in ("123", "true", "[]"):
+                with self.subTest(value=value):
+                    path.write_text(f"[ssh]\njump_host = {value}\n")
+                    with patch.dict(os.environ, {"NETBOX_SSH_CONFIG": str(path)}, clear=True):
+                        with self.assertRaisesRegex(ValueError, "ssh.jump_host must be text"):
+                            Config.from_env()
+
+    def test_tree_defaults_and_validation(self):
+        cases = [
+            ("", "auto", "Other sites"),
+            ("[tree]\n", "auto", "Other sites"),
+            ('[tree]\nunassigned_group = "Unassigned"\n', "auto", "Unassigned"),
+            ('[tree]\nlayout = "sites"\n', "sites", "Other sites"),
+            ('[tree]\nlayout = "regions"\n', "regions", "Other sites"),
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.toml"
+            with patch.dict(os.environ, {"NETBOX_SSH_CONFIG": str(path)}, clear=True):
+                for content, layout, group in cases:
+                    with self.subTest(content=content):
+                        path.write_text(content)
+                        config = Config.from_env()
+                        self.assertEqual(config.tree_layout, layout)
+                        self.assertEqual(config.tree_unassigned_group, group)
+                for content in ('[tree]\nlayout = "wrong"', '[tree]\nlayout = 3',
+                                '[tree]\nunassigned_group = " "', 'tree = "sites"'):
+                    with self.subTest(content=content):
+                        path.write_text(content)
+                        with self.assertRaises(ValueError):
+                            Config.from_env()
+
 
 if __name__ == "__main__":
     unittest.main()

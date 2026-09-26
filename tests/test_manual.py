@@ -56,6 +56,40 @@ class ManualInventoryTests(unittest.TestCase):
             with self.subTest(target=target), self.assertRaises(ValueError):
                 validate_manual_target(target)
 
+    def test_optional_location_fields_and_round_trip(self):
+        base = {"branch": "Office", "role": "Core", "name": "manual", "target": "10.0.0.1"}
+        for optional in ({}, {"region": "", "country": "", "city": ""},
+                         {"region": None, "country": None, "city": None}):
+            with self.subTest(optional=optional):
+                manual = ManualDevice.from_dict({**base, **optional})
+                self.assertEqual(manual.location_path, ("Office",))
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "manual.json"
+                    save_manual_devices(path, [manual])
+                    self.assertEqual(load_manual_devices(path), [manual])
+        for field in base:
+            for value in ("", None, 5):
+                with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                    ManualDevice.from_dict({**base, field: value})
+
+    def test_layout_changes_do_not_change_manual_identifier(self):
+        manual = ManualDevice("Europe", "Poland", "Office", "Office", "Core", "extra", "10.0.0.2")
+        regional = merge_manual_devices([], [manual])
+        flat = merge_manual_devices([], [manual], layout="sites")
+        regional_device = regional[0].children[0].children[0].devices[0]
+        self.assertEqual(flat[0].name, "Office")
+        self.assertEqual(flat[0].devices[0].identifier, regional_device.identifier)
+        self.assertEqual(regional_device.identifier, "manual:europe/poland/office/extra")
+        self.assertEqual(manual.region, "Europe")
+
+    def test_missing_region_uses_group_without_empty_nodes(self):
+        manual = ManualDevice("", "", "Town", "Office", "Core", "extra", "10.0.0.2")
+        roots = merge_manual_devices([], [manual], unassigned_group="Unassigned")
+        self.assertEqual(roots[0].kind, "group")
+        self.assertEqual(roots[0].name, "Unassigned")
+        self.assertEqual(roots[0].children[0].name, "Town")
+        self.assertEqual(roots[0].children[0].children[0].name, "Office")
+
 
 if __name__ == "__main__":
     unittest.main()

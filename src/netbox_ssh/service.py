@@ -3,8 +3,8 @@ from fnmatch import fnmatchcase
 import httpx
 
 from .cache import Cache, save_cache
+from .inventory import normalize_inventory
 from .config import Config
-from .model import build_tree
 from .netbox import NetBoxClient
 
 
@@ -19,8 +19,8 @@ def synchronize(config: Config) -> tuple[Cache, int]:
     devices = filter_ignored_manufacturers(devices, config.ignored_manufacturers)
     devices = filter_ignored_device_types(devices, config.ignored_device_types)
     devices = filter_ignored_name_patterns(devices, config.ignored_name_patterns)
-    region_tree = build_tree(regions, sites, devices)
-    return save_cache(config.cache_path, region_tree), len(devices)
+    inventory = normalize_inventory(regions, sites, devices)
+    return save_cache(config.cache_path, inventory), len(devices)
 
 
 def filter_device_roles(devices: list[dict], allowed_roles: tuple[str, ...]) -> list[dict]:

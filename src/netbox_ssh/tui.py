@@ -18,6 +18,7 @@ from .cache import Cache
 from .config import Config
 from .editor import editor_command, ensure_config_file, ensure_manual_file
 from .jump_state import save_jump_devices
+from .inventory import resolve_layout
 from .manual import (
     ManualDevice,
     load_manual_devices,
@@ -67,9 +68,13 @@ class AddDeviceScreen(ModalScreen[ManualDevice | None]):
     """
     BINDINGS = [Binding("escape", "cancel", "Cancel")]
 
-    def __init__(self, path: tuple[str, ...], roles: list[str]) -> None:
+    def __init__(
+        self, path: tuple[str, ...], roles: list[str], *,
+        location: tuple[str, str, str, str] | None = None,
+    ) -> None:
         super().__init__()
         self.location_path = path
+        self.location = location
         self.default_role = roles[0] if roles else "Manual"
 
     def compose(self) -> ComposeResult:
@@ -118,9 +123,12 @@ class AddDeviceScreen(ModalScreen[ManualDevice | None]):
         except ValueError as error:
             self.query_one("#manual-error", Static).update(str(error))
             return
-        region, country = self.location_path[:2]
-        city = self.location_path[-2] if len(self.location_path) >= 4 else self.location_path[-1]
-        branch = self.location_path[-1]
+        if self.location is not None:
+            region, country, city, branch = self.location
+        else:
+            region, country = self.location_path[:2]
+            city = self.location_path[-2] if len(self.location_path) >= 4 else self.location_path[-1]
+            branch = self.location_path[-1]
         self.dismiss(ManualDevice(region, country, city, branch, role, name, target))
 
 
@@ -172,7 +180,7 @@ class NetBoxSSHApp(App[None]):
         self.jump_devices = set(jump_devices or set())
         self.regions = self._merged_regions()
         self._apply_jump_state()
-        self.views: list[View] = [View("Countries", path=())]
+        self.views: list[View] = [View(self._root_title(), path=())]
         self.visible_entries: list[Entry] = []
         self.item_entries: dict[int, Entry] = {}
         self.syncing = False
@@ -190,7 +198,7 @@ class NetBoxSSHApp(App[None]):
         yield Footer()
 
     def get_system_commands(self, screen: Screen):
-        """Adds full action names to the palette while the footer stays compact."""
+        """Udostępnia pełne nazwy akcji w palecie, zachowując krótkie etykiety stopki."""
         yield from super().get_system_commands(screen)
         yield SystemCommand(
             "Sync from NetBox",
@@ -207,7 +215,12 @@ class NetBoxSSHApp(App[None]):
         await self._render_entries()
         self.query_one(ListView).focus()
         if self.cache is None:
-            self._set_status("No local data. Press S to sync with NetBox.")
+            message = (
+                "Cache needs refreshing. Press S to sync with NetBox."
+                if self.config.cache_path.exists() else
+                "No local data. Press S to sync with NetBox."
+            )
+            self._set_status(message)
         else:
             self._set_status(f"Last sync: {self.cache.synced_at}")
 
@@ -222,20 +235,24 @@ class NetBoxSSHApp(App[None]):
                 for device in view.role_devices
             ]
         if view.node is not None:
-            if len(self.views) == 2:
+            if (self.effective_layout == "regions" and len(self.views) == 2
+                    and view.node.kind == "region"):
                 return self._country_entries(view.node)
             return self._location_entries(view.node)
+        if self.effective_layout == "sites":
+            return [Entry("node", site.name, site, "Site", (site.name,))
+                    for site in self.regions]
         return self._region_entries()
 
     def _region_entries(self) -> list[Entry]:
         entries: list[Entry] = []
         for region in self.regions:
             # Region jest nagłówkiem, a kraje linkami, co usuwa jedno kliknięcie.
-            entries.append(Entry("heading", region.name, detail="Region"))
+            entries.append(Entry("heading", region.name, detail="Group" if region.kind == "group" else "Region"))
             if region.devices:
-                entries.append(Entry("node", region.name, region, "Country", (region.name,)))
+                entries.append(Entry("node", region.name, region, "Site" if region.kind == "site" else "Country", (region.name,)))
             entries.extend(
-                Entry("node", country.name, country, "Country", (region.name, country.name))
+                Entry("node", country.name, country, "Site" if country.kind == "site" else "Country", (region.name, country.name))
                 for country in region.children
             )
         return entries
@@ -525,11 +542,24 @@ class NetBoxSSHApp(App[None]):
     def action_add_device(self) -> None:
         """Otwiera formularz tylko w kontekście konkretnego oddziału."""
         view = self.views[-1]
-        if view.node is None or len(view.path) < 3:
-            self._set_status("Navigate to a branch before adding a manual device.", "error")
+        minimum = 1 if self.effective_layout == "sites" else 3
+        # Sites bez regionu są dostępne bezpośrednio w grupie Other sites,
+        # dlatego pozwalamy w nich dodawać hosty mimo krótszej ścieżki.
+        unassigned = bool(
+            view.node and view.node.manual_location is not None
+            and not view.node.manual_location[0]
+        )
+        if (view.node is None or view.node.kind == "group"
+                or (len(view.path) < minimum and not unassigned)):
+            self._set_status("Navigate to a site or branch before adding a manual device.", "error")
             return
         roles = sorted({device.role for device in view.node.devices}, key=str.casefold)
-        self.push_screen(AddDeviceScreen(view.path, roles), self._manual_device_added)
+        location = view.node.manual_location
+        if self.effective_layout == "sites":
+            location = ("", "", "", view.node.name)
+        self.push_screen(
+            AddDeviceScreen(view.path, roles, location=location), self._manual_device_added
+        )
 
     def action_edit_config(self) -> None:
         """Otwiera aktywny config.toml i wczytuje ustawienia po zamknięciu edytora."""
@@ -541,6 +571,7 @@ class NetBoxSSHApp(App[None]):
         except (OSError, ValueError) as error:
             self._set_status(f"Could not reload configuration: {error}", "error")
             return
+        self._rebuild_view()
         self._set_status(f"Configuration reloaded from {self.config.config_path}.", "success")
 
     def action_edit_manual(self) -> None:
@@ -554,11 +585,7 @@ class NetBoxSSHApp(App[None]):
             self._set_status(f"Could not reload manual inventory: {error}", "error")
             return
         self.manual_devices = manual_devices
-        self.regions = self._merged_regions()
-        self._apply_jump_state()
-        self.views = [View("Countries", path=())]
-        self.selected_devices.clear()
-        self.run_worker(self._reset_and_render(), exclusive=True)
+        self._rebuild_view()
         self._set_status(
             f"Manual inventory reloaded: {len(manual_devices)} devices.", "success"
         )
@@ -588,7 +615,8 @@ class NetBoxSSHApp(App[None]):
         if manual is None:
             return
         duplicate = any(
-            item.location_path == manual.location_path
+            item.display_path(self.effective_layout, self.config.tree_unassigned_group)
+            == manual.display_path(self.effective_layout, self.config.tree_unassigned_group)
             and item.name.casefold() == manual.name.casefold()
             for item in self.manual_devices
         )
@@ -602,26 +630,10 @@ class NetBoxSSHApp(App[None]):
             self.manual_devices.pop()
             self._set_status(f"Could not save manual inventory: {error}", "error")
             return
-        # Aktualny View wskazuje węzeł z self.regions, więc możemy dopisać wpis
-        # bez przebudowy drzewa i pozostawić użytkownika w tym samym oddziale.
-        current_node = self.views[-1].node
-        assert current_node is not None
-        current_node.devices.append(
-            Device(
-                manual.name,
-                manual.role,
-                manual.target,
-                source="manual",
-                identifier=(
-                    "manual:"
-                    + "/".join((*manual.location_path, manual.name)).casefold()
-                ),
-            )
-        )
-        current_node.devices.sort(
-            key=lambda device: (device.role.casefold(), device.name.casefold())
-        )
-        self.run_worker(self._render_entries(), exclusive=True)
+        # Synchronizacja mogła podmienić drzewo, gdy formularz był otwarty.
+        # Korzystamy z najnowszego cache i lokalizacji zapisanej przez formularz,
+        # a nie z bieżącego widoku, który mógł już wrócić do ekranu głównego.
+        self._rebuild_view(focus_manual=manual)
         self._set_status(f"Manual device {manual.name} saved.", "success")
 
     def _sync_worker(self) -> None:
@@ -641,20 +653,74 @@ class NetBoxSSHApp(App[None]):
     def _sync_finished(self, cache: Cache, device_count: int) -> None:
         self.syncing = False
         self.cache = cache
-        self.regions = self._merged_regions()
-        self._apply_jump_state()
-        self.views = [View("Countries", path=())]
-        self.run_worker(self._reset_and_render(), exclusive=True)
-        country_count = sum(len(region.children) for region in cache.regions)
-        message = f"Sync complete: {device_count} devices, {country_count} countries."
+        self._rebuild_view()
+        site_ids = {site["id"] for site in cache.sites}
+        displayed = [device for device in cache.devices if device["site_id"] in site_ids]
+        site_count = len({device["site_id"] for device in displayed})
+        message = f"Sync complete: {len(displayed)} devices, {site_count} sites."
+        missing_address = device_count - len(cache.devices)
+        missing_site = len(cache.devices) - len(displayed)
+        if missing_address:
+            message += f" {missing_address} devices without a selected address omitted."
+        if missing_site:
+            message += f" {missing_site} devices without an available site omitted."
         self._set_status(message, "success")
         self.notify(message, title="NetBox")
+
+    def _root_title(self) -> str:
+        if self.effective_layout == "sites":
+            return "Sites"
+        if any(node.kind == "group" for node in self.regions):
+            return "Locations"
+        return "Countries"
+
+    def _rebuild_view(self, *, focus_manual: ManualDevice | None = None) -> None:
+        self.regions = self._merged_regions()
+        self._apply_jump_state()
+        self.views = [View(self._root_title(), path=())]
+        if focus_manual is not None:
+            self._restore_location(focus_manual.display_path(
+                self.effective_layout, self.config.tree_unassigned_group,
+            ))
+        self.selected_devices.clear()
+        self.run_worker(self._reset_and_render(), exclusive=True)
+
+    def _restore_location(self, path: tuple[str, ...]) -> None:
+        """Odtwarza nawigację do lokalizacji i pozycje kursora dla akcji Wstecz."""
+        target = tuple(name.casefold() for name in path)
+        while tuple(name.casefold() for name in self.views[-1].path) != target:
+            candidates = [
+                (index, entry)
+                for index, entry in enumerate(self._entries_for_view())
+                if entry.kind == "node"
+                and len(entry.path) > len(self.views[-1].path)
+                and tuple(name.casefold() for name in entry.path) == target[:len(entry.path)]
+            ]
+            if not candidates:
+                # Zapisana lokalizacja może nie mieć już dostępnej ścieżki nawigacji.
+                # Wtedy pozostajemy na ekranie głównym zamiast używać starego węzła.
+                self.views = [View(self._root_title(), path=())]
+                return
+            # Widok regionalny pomija część poziomów (np. nagłówki miast).
+            # Wybieramy najdłuższy pasujący fragment aktualnej ścieżki.
+            index, entry = max(candidates, key=lambda item: len(item[1].path))
+            self.views[-1].cursor_index = index
+            self.views.append(View(entry.label, node=entry.value, path=entry.path))
 
     def _merged_regions(self) -> list[Node]:
         from .manual import merge_manual_devices
 
+        self.effective_layout = resolve_layout(
+            self.config.tree_layout,
+            has_regions=bool(self.cache and self.cache.regions),
+            has_manual_regions=any(manual.region for manual in self.manual_devices),
+        )
+        tree = self.cache.tree(
+            self.effective_layout, self.config.tree_unassigned_group
+        ) if self.cache else []
         return merge_manual_devices(
-            self.cache.regions if self.cache else [], self.manual_devices
+            tree, self.manual_devices, layout=self.effective_layout,
+            unassigned_group=self.config.tree_unassigned_group,
         )
 
     def _jump_state_path(self):

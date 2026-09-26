@@ -2,18 +2,20 @@ from __future__ import annotations
 
 import os
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from platformdirs import user_cache_path, user_data_path
+
+from .config_upgrade import upgrade_config_file
 
 @dataclass(frozen=True)
 class Config:
     """Efektywna konfiguracja po połączeniu pliku TOML i zmiennych powłoki."""
 
     netbox_url: str | None
-    api_token: str | None
+    api_token: str | None = field(repr=False)
     verify_ssl: bool
     cache_path: Path
     manual_path: Path
@@ -25,6 +27,8 @@ class Config:
     ignored_name_patterns: tuple[str, ...] = ()
     jump_host: str | None = None
     jump_state_path: Path | None = None
+    tree_layout: str = "auto"
+    tree_unassigned_group: str = "Other sites"
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -33,7 +37,7 @@ class Config:
         # Ręczne wpisy są danymi użytkownika, a nie cache i nie mogą znikać przy czyszczeniu cache.
         data_home = user_data_path("netbox-ssh-browser", appauthor=False)
         config_home = Path(
-            os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")
+            os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config"
         )
         user_config_path = config_home / "netbox-ssh-browser" / "config.toml"
         local_config_path = Path.cwd() / "config.toml"
@@ -49,11 +53,24 @@ class Config:
         else:
             config_path = user_config_path
         file_config = _read_config(config_path)
-        netbox = file_config.get("netbox", {})
-        sync = file_config.get("sync", {})
-        ssh = file_config.get("ssh", {})
+        sections = {}
+        for name in ("netbox", "sync", "ssh", "tree"):
+            value = file_config.get(name, {})
+            if not isinstance(value, dict):
+                raise ValueError(f"{name} must be a TOML table")
+            sections[name] = value
+        netbox = sections["netbox"]
+        sync = sections["sync"]
+        ssh = sections["ssh"]
+        tree = sections["tree"]
+        layout = tree.get("layout", "auto")
+        if layout not in ("auto", "regions", "sites"):
+            raise ValueError("tree.layout must be auto, regions, or sites")
+        unassigned_group = tree.get("unassigned_group", "Other sites")
+        if not isinstance(unassigned_group, str) or not unassigned_group.strip():
+            raise ValueError("tree.unassigned_group must be non-empty text")
         jump_host = _clean_ssh_value(ssh.get("jump_host"), "ssh.jump_host")
-        return cls(
+        config = cls(
             # Zmienne powłoki celowo nadpisują ustawienia zapisane w TOML.
             netbox_url=_clean_url(os.environ.get("NETBOX_URL") or netbox.get("url")),
             # Token może być zapisany w prywatnym config.toml. Zmienna środowiskowa
@@ -81,7 +98,12 @@ class Config:
                 str(value) for value in sync.get("ignored_name_patterns", [])
             ),
             jump_host=jump_host,
+            tree_layout=layout,
+            tree_unassigned_group=unassigned_group.strip(),
         )
+
+        upgrade_config_file(config_path)
+        return config
 
     def validate_sync(self) -> None:
         """Sprawdza sekrety wymagane dopiero podczas ręcznej synchronizacji."""
@@ -109,9 +131,15 @@ def _as_bool(value: str) -> bool:
 
 
 def _clean_ssh_value(value: Any, setting: str) -> str | None:
-    if value is None or not str(value).strip():
+    if value is None:
         return None
-    result = str(value).strip()
+    if not isinstance(value, str):
+        raise ValueError(f"{setting} must be text")
+    if any(ord(character) < 32 or ord(character) == 127 for character in value):
+        raise ValueError(f"{setting} contains a control character")
+    result = value.strip()
+    if not result:
+        return None
     if result.startswith("-") or any(character.isspace() for character in result):
         raise ValueError(
             f"{setting} must be a hostname, IP, or SSH alias without whitespace"
