@@ -15,6 +15,12 @@ api_token = ""
 verify_ssl = true
 
 [sync]
+# Try these address sources in order; omitted sources are never used.
+# fqdn uses the NetBox device name as a DNS/SSH target only when listed.
+# Devices without a selected address are omitted. Empty [] omits all NetBox devices.
+# Press S after changing this setting. Manual device targets are unchanged.
+# Example: address_order = ["oob_ip", "primary_ip4"]
+address_order = ["primary_ip4", "primary_ip6", "oob_ip", "fqdn"]
 # Empty [] imports devices with any status.
 # Example: device_statuses = ["active", "planned", "staged"]
 device_statuses = ["active"]
@@ -30,6 +36,15 @@ ignored_name_patterns = []
 # Empty [] imports devices with every role.
 # Example: device_roles = ["Router", "Core Switch", "Distribution Switch"]
 device_roles = []
+
+[tree]
+# auto: use regions when present in cached or manual inventory; otherwise list sites.
+# regions: preserve the region, country, and location hierarchy.
+# sites: list sites directly, regardless of their region assignments.
+# Missing layout settings default to auto.
+layout = "auto"
+# Group name for locations without a region in the regions layout.
+unassigned_group = "Other sites"
 
 [ssh]
 # Hostname, IP, user@host, or an alias from ~/.ssh/config.

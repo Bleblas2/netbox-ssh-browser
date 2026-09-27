@@ -1,6 +1,11 @@
 import unittest
 
 from netbox_ssh.model import build_tree
+from netbox_ssh.inventory import normalize_inventory
+
+
+def tree_from_api(regions, sites, devices, **options):
+    return build_tree(**normalize_inventory(regions, sites, devices), **options)
 
 
 class BuildTreeTests(unittest.TestCase):
@@ -19,7 +24,7 @@ class BuildTreeTests(unittest.TestCase):
             "role": {"name": "Switch"},
             "primary_ip4": {"address": "192.0.2.3/24"},
         }]
-        regions = build_tree(self.regions, sites, devices)
+        regions = tree_from_api(self.regions, sites, devices)
         self.assertEqual([item.name for item in regions], ["Region Group A"])
         country = regions[0].children[0]
         self.assertEqual(country.name, "Country A")
@@ -37,7 +42,7 @@ class BuildTreeTests(unittest.TestCase):
             "primary_ip4": None,
             "primary_ip6": None,
         }]
-        regions = build_tree(self.regions, sites, devices)
+        regions = tree_from_api(self.regions, sites, devices)
         branch = regions[0].children[0].children[0].children[0]
         self.assertEqual(branch.name, "Warehouse 1")
         self.assertEqual(branch.devices[0].ssh_target, "switch-a-01")
@@ -55,7 +60,7 @@ class BuildTreeTests(unittest.TestCase):
             }
         ]
 
-        regions = build_tree(self.regions, sites, devices)
+        regions = tree_from_api(self.regions, sites, devices)
 
         device = regions[0].children[0].children[0].devices[0]
         self.assertEqual(device.name, "unnamed-device-74")
@@ -66,6 +71,7 @@ class BuildTreeTests(unittest.TestCase):
         devices = [
             {
                 "id": 75,
+                "oob_ip": {"address": "192.0.2.75/32"},
                 "name": None,
                 "display": None,
                 "site": {"id": 10},
@@ -73,7 +79,7 @@ class BuildTreeTests(unittest.TestCase):
             }
         ]
 
-        regions = build_tree(self.regions, sites, devices)
+        regions = tree_from_api(self.regions, sites, devices)
 
         device = regions[0].children[0].children[0].devices[0]
         self.assertEqual(device.name, "Device 75")
@@ -93,7 +99,7 @@ class BuildTreeTests(unittest.TestCase):
             {"name": "switch-a", "site": {"id": 10}, "role": {"name": "Switch"}},
             {"name": "switch-b", "site": {"id": 11}, "role": {"name": "Switch"}},
         ]
-        trees = build_tree(regions, sites, devices)
+        trees = tree_from_api(regions, sites, devices)
         self.assertEqual(
             [region.name for region in trees], ["Region Group A", "Region Group B"]
         )
@@ -119,9 +125,38 @@ class BuildTreeTests(unittest.TestCase):
             }
         ]
 
-        trees = build_tree(regions, sites, devices)
+        trees = tree_from_api(regions, sites, devices)
 
         self.assertEqual([region.name for region in trees], ["North America"])
+
+    def test_site_only_and_mixed_layouts(self):
+        sites = [
+            {"id": 10, "name": "Assigned", "region": {"id": 354}},
+            {"id": 11, "name": "Unassigned", "region": None},
+        ]
+        devices = [
+            {"id": i, "name": f"core-{i}", "site": {"id": site_id}, "role": {"name": "Core"}}
+            for i, site_id in ((1, 10), (2, 11))
+        ]
+        flat = tree_from_api(self.regions, sites, devices, layout="sites")
+        self.assertEqual([node.name for node in flat], ["Assigned", "Unassigned"])
+        self.assertEqual([node.devices[0].identifier for node in flat], ["netbox:1", "netbox:2"])
+        no_regions = tree_from_api([], sites, devices)
+        self.assertEqual([node.name for node in no_regions], ["Assigned", "Unassigned"])
+        mixed = tree_from_api(self.regions, sites, devices)
+        group = next(node for node in mixed if node.kind == "group")
+        self.assertEqual(group.name, "Other sites")
+        self.assertEqual(group.children[0].devices[0].identifier, "netbox:2")
+        explicit = tree_from_api([], sites, devices, layout="regions", unassigned_group="Unassigned")
+        self.assertEqual(explicit[0].name, "Unassigned")
+        self.assertEqual(len(explicit[0].children), 2)
+
+    def test_sites_with_same_name_keep_separate_devices(self):
+        sites = [{"id": i, "name": "Office", "region": None} for i in (1, 2)]
+        devices = [{"id": i, "name": f"core-{i}", "site": i} for i in (1, 2)]
+        roots = tree_from_api([], sites, devices)
+        self.assertEqual(len(roots), 2)
+        self.assertEqual([node.devices[0].identifier for node in roots], ["netbox:1", "netbox:2"])
 
 
 if __name__ == "__main__":

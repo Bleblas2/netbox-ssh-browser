@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from .inventory import DeviceRecord, RegionRecord, SiteRecord, resolve_layout
+
 
 @dataclass
 class Device:
@@ -47,10 +49,14 @@ class Node:
     name: str
     children: list["Node"] = field(default_factory=list)
     devices: list[Device] = field(default_factory=list)
+    kind: str = "region"
+    manual_location: tuple[str, str, str, str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
+            "kind": self.kind,
+            "manual_location": self.manual_location,
             "children": [child.to_dict() for child in self.children],
             "devices": [device.to_dict() for device in self.devices],
         }
@@ -61,86 +67,69 @@ class Node:
             name=data["name"],
             children=[cls.from_dict(item) for item in data.get("children", [])],
             devices=[Device.from_dict(item) for item in data.get("devices", [])],
+            kind=data.get("kind", "region"),
+            manual_location=tuple(data["manual_location"]) if data.get("manual_location") else None,
         )
 
 
 def build_tree(
-    regions: list[dict[str, Any]],
-    sites: list[dict[str, Any]],
-    devices: list[dict[str, Any]],
+    regions: list[RegionRecord],
+    sites: list[SiteRecord],
+    devices: list[DeviceRecord],
+    *, layout: str = "auto", unassigned_group: str = "Other sites",
 ) -> list[Node]:
-    """Łączy płaskie odpowiedzi API w drzewo lokalizacji z urządzeniami."""
+    """Buduje widok ze znormalizowanej inwentaryzacji, bez interpretowania API."""
+    layout = resolve_layout(layout, has_regions=bool(regions))
     nodes = {item["id"]: Node(item["name"]) for item in regions}
-    region_parent: dict[int, int | None] = {}
     roots: list[Node] = []
 
-    for item in regions:
-        # Odtwarzamy dowolnie głębokie drzewo na podstawie relacji parent.
-        parent_id = _object_id(item.get("parent"))
-        region_parent[item["id"]] = parent_id
-        if parent_id in nodes:
-            nodes[parent_id].children.append(nodes[item["id"]])
-        else:
-            roots.append(nodes[item["id"]])
+    if layout == "regions":
+        for item in regions:
+            parent_id = item["parent_id"]
+            if parent_id in nodes:
+                nodes[parent_id].children.append(nodes[item["id"]])
+            else:
+                roots.append(nodes[item["id"]])
 
-    sites_by_id = {item["id"]: item for item in sites}
-    for raw in devices:
-        # Standardowy NetBox przypisuje urządzenie do site, a site do regionu.
-        site_id = _object_id(raw.get("site"))
-        site = sites_by_id.get(site_id)
-        if not site:
+    site_nodes: dict[int, Node] = {}
+    other_sites: Node | None = None
+    for site in sites:
+        name = site["name"]
+        site_node = Node(name, kind="site")
+        region_id = site["region_id"]
+        if layout == "sites":
+            roots.append(site_node)
+        elif region_id in nodes:
+            parent = nodes[region_id]
+            if name.casefold() == parent.name.casefold():
+                # Wspólna nazwa pozwala pominąć dodatkowy poziom, ale węzeł nadal
+                # jest regionem. Nawet pusty Site nie może zmieniać nawigacji kraju.
+                site_node = parent
+            else:
+                parent.children.append(site_node)
+        else:
+            if other_sites is None:
+                other_sites = Node(unassigned_group, kind="group")
+                roots.append(other_sites)
+            other_sites.children.append(site_node)
+            site_node.manual_location = ("", "", "", name)
+        site_nodes[site["id"]] = site_node
+
+    for record in devices:
+        target_node = site_nodes.get(record["site_id"])
+        if target_node is None:
             continue
-        region_id = _object_id(site.get("region"))
-        if region_id not in nodes:
-            continue
-        region_node = nodes[region_id]
-        target_node = region_node
-        site_name = site.get("name") or site.get("display")
-        if site_name and site_name.casefold() != region_node.name.casefold():
-            # Nie dublujemy poziomu, gdy site i końcowy region mają tę samą nazwę.
-            target_node = _child_named(region_node, site_name)
-        role = raw.get("role") or raw.get("device_role") or {}
-        role_name = role.get("name") or role.get("display") or "Other"
-        # NetBox zezwala na urządzenia bez nazwy. W takim przypadku odpowiedź
-        # API zawiera zwykle czytelne `display`; ID pozostaje ostatnim,
-        # stabilnym fallbackiem i gwarantuje tekst wymagany przez TUI.
-        device_name = raw.get("name") or raw.get("display")
-        if not device_name:
-            device_id = raw.get("id")
-            device_name = (
-                f"Device {device_id}" if device_id is not None else "Unnamed device"
-            )
-        ip = raw.get("primary_ip4") or raw.get("primary_ip6")
-        if isinstance(ip, dict):
-            ip = ip.get("address") or ip.get("display")
-        device_id = raw.get("id")
-        identifier = f"netbox:{device_id}" if device_id is not None else None
         target_node.devices.append(
-            Device(str(device_name), str(role_name), ip, identifier=identifier)
+            Device(record["name"], record["role"], record["primary_ip"],
+                   identifier=record["identifier"])
         )
 
     _prune_and_sort(roots)
     return roots
 
 
-def _child_named(parent: Node, name: str) -> Node:
-    """Zwraca istniejący węzeł site albo tworzy go bez dublowania nazwy."""
-    for child in parent.children:
-        if child.name.casefold() == name.casefold():
-            return child
-    child = Node(name)
-    parent.children.append(child)
-    return child
-
-
-def _object_id(value: Any) -> int | None:
-    if isinstance(value, dict):
-        return value.get("id")
-    return value if isinstance(value, int) else None
-
-
 def _prune_and_sort(nodes: list[Node]) -> None:
-    # Puste gałęzie nie pomagają w nawigacji, więc nie zapisujemy ich w cache.
+    # Puste gałęzie nie pomagają w nawigacji, więc pomijamy je w widoku.
     # Najpierw czyścimy potomków, bo rodzic zawierający wyłącznie puste gałęzie
     # również powinien zostać usunięty.
     for node in nodes:

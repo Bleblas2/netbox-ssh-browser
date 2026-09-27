@@ -2,10 +2,63 @@
 
 All notable changes to NetBox SSH Browser will be documented in this file.
 
-The format is based on Keep a Changelog and the project uses semantic
-versioning.
+The project uses semantic versioning. Release notes group new features,
+enhancements, bug fixes, and upgrade notes by version.
 
 ## [Unreleased]
+
+## v0.1.6 (2026-09-27)
+
+### New Features
+
+#### Sites Without Regions and Configurable Tree Layouts ([#11](https://github.com/Bleblas2/netbox-ssh-browser/issues/11))
+
+Devices assigned to sites without a region are now accessible in the location
+tree, including inventories which combine regional and unassigned sites.
+The new `[tree] layout` setting controls how locations are displayed:
+
+- `auto` (default): use the region hierarchy when available; otherwise list sites.
+- `regions`: preserve regional navigation and group sites without an available
+  region under `Other sites`, configurable through `[tree] unassigned_group`.
+- `sites`: list sites directly, regardless of their region assignments.
+
+Existing configurations use `auto` without requiring changes. Layouts can be
+switched using cached inventory, and jump-host selections remain attached to
+the same devices across layout changes and synchronization.
+
+### Enhancements
+
+- Add missing tree and address defaults without overwriting user settings;
+  skip configuration updates when write access is unavailable.
+
+- Add OOB IP support and configurable address priority through
+  `[sync] address_order`, with optional `fqdn` (device name) selection and
+  omission of devices without an enabled address source.
+
+- [#11](https://github.com/Bleblas2/netbox-ssh-browser/issues/11) - Allow manual
+  devices without region, country, or city values, and adapt location labels
+  and device creation to the active layout. Existing manual inventory files
+  remain readable.
+
+### Security
+
+- Restrict API requests, pagination, and redirects to the configured NetBox
+  scheme, host, and port to prevent token disclosure.
+- Validate API pagination responses and SSH targets, including jump hosts;
+  hide the API token from configuration representations.
+
+### Bug Fixes
+
+- Correctly resolve relative API pagination links.
+- Put the comment for automatically added `address_order` on a separate line.
+- Handle malformed configuration sections and an empty `XDG_CONFIG_HOME` safely.
+
+### Upgrade Notes
+
+This release introduces cache v3, which stores regions, sites, and devices
+independently of the selected tree layout. Cache v2 is not converted: press `S`
+to synchronize once before using NetBox inventory offline. Manual inventory
+files remain compatible.
 
 ## [0.1.5] - 2026-09-21
 

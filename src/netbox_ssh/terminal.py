@@ -32,15 +32,31 @@ def is_iterm2() -> bool:
     return platform.system() == "Darwin" and os.environ.get("TERM_PROGRAM") == "iTerm.app"
 
 
+def _validate_ssh_target(value: object, setting: str) -> str:
+    """Sprawdza cel SSH przed przekazaniem go klientowi systemowemu."""
+    if not isinstance(value, str):
+        raise ValueError(f"{setting} must be text")
+    if (
+        not value
+        or value.startswith("-")
+        or any(character.isspace() or ord(character) < 32 or ord(character) == 127
+               for character in value)
+    ):
+        raise ValueError(f"{setting} must be a non-empty SSH target without whitespace")
+    return value
+
+
 def ssh_arguments(device: Device, jump_host: str | None = None) -> list[str]:
+    target = _validate_ssh_target(device.ssh_target, "SSH target")
     if device.use_jump_host:
         if not jump_host:
             raise ValueError("No SSH jump host is configured.")
+        jump_host = _validate_ssh_target(jump_host, "SSH jump host")
         # The second client runs on the jump host. This works on bastions that
         # prohibit TCP forwarding and lets the target prompt for a password.
-        remote_command = f"ssh {shlex.quote(device.ssh_target)}"
+        remote_command = f"ssh {shlex.quote(target)}"
         return ["ssh", "-tt", jump_host, remote_command]
-    return ["ssh", device.ssh_target]
+    return ["ssh", target]
 
 
 def run_system_ssh(

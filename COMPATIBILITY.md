@@ -23,6 +23,21 @@ tokens beginning with `nbt_`.
 NetBox object permissions and constrained permissions are enforced by NetBox
 before inventory reaches the application.
 
+Sites without regions are supported. `[tree] layout` accepts `auto`, `regions`,
+and `sites`; layout changes work with cache v3 while offline.
+
+Address selection uses `[sync] address_order`. Missing API fields, including
+`oob_ip`, are skipped in favor of the next configured source. `fqdn` uses the
+NetBox device name. Devices without any selected address are omitted from the
+cache. Cache v2 requires a fresh synchronization with `S`.
+
+## Configuration updates
+
+Missing tree and address-selection settings are added using ordinary user
+permissions. Existing values and comments are preserved. A read-only file or
+unwritable directory prevents the update but does not prevent using the loaded
+configuration and in-memory defaults. No administrator privileges are required.
+
 ## Terminals
 
 The Textual interface requires a terminal with standard ANSI and alternate
